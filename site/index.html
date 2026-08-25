@@ -197,37 +197,51 @@
     color:var(--band-fg);
     overflow:hidden;
     padding-top:120px;
+    perspective:1400px;
   }
-  .hero-sky{position:absolute;inset:0;background:
+  .hero::after{
+    content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 100%, transparent 45%, rgba(6,6,9,.55) 100%);
+  }
+  .hero-scene{
+    position:absolute;inset:0;
+    transform-style:preserve-3d;
+    will-change:transform;
+    transform:rotateX(0deg) rotateY(0deg);
+  }
+  .hero-sky{position:absolute;inset:0;transform:translateZ(-140px) scale(1.11);background:
       radial-gradient(120% 70% at 78% 8%, #4a3416 0%, transparent 55%),
       linear-gradient(185deg,#0b0c10 0%, #14151b 42%, #1c1a17 78%, #241d13 100%);
   }
   .hero-sun{position:absolute;right:8%;top:6%;width:min(46vw,520px);height:min(46vw,520px);border-radius:50%;
     background:radial-gradient(circle at 45% 45%, rgba(234,178,79,.55), rgba(234,178,79,0) 70%);
     filter:blur(2px);
+    transform:translateZ(-100px);
   }
   .hero-grid{position:absolute;inset:0;opacity:.14;
     background-image:linear-gradient(to right, var(--band-line) 1px, transparent 1px),
                       linear-gradient(to bottom, var(--band-line) 1px, transparent 1px);
     background-size:64px 64px;
     mask-image:linear-gradient(to bottom, transparent, black 40%);
+    transform:translateZ(-70px) scale(1.06);
   }
   .hero-particle{position:absolute;border-radius:50%;background:var(--band-accent);opacity:.55;
     animation:drift 14s ease-in-out infinite;
+    transform:translateZ(10px);
   }
   @keyframes drift{
-    0%,100%{transform:translateY(0) translateX(0);opacity:.15;}
-    50%{transform:translateY(-38px) translateX(12px);opacity:.65;}
+    0%,100%{transform:translateY(0) translateX(0) translateZ(10px);opacity:.15;}
+    50%{transform:translateY(-38px) translateX(12px) translateZ(10px);opacity:.65;}
   }
-  .hero-skyline{position:absolute;left:0;right:0;bottom:0;height:46%;color:#0a0a0d;}
+  .hero-skyline{position:absolute;left:0;right:0;bottom:0;height:46%;color:#0a0a0d;transform:translateZ(50px);}
   .hero-skyline svg{width:100%;height:100%;display:block;}
-  .hero-crane{position:absolute;color:var(--band-fg);opacity:.85;}
+  .hero-crane{position:absolute;color:var(--band-fg);opacity:.85;transform:translateZ(30px);}
   .hero-crane.c1{left:4%;bottom:14%;width:min(30vw,300px);}
-  .hero-crane.c2{right:6%;bottom:14%;width:min(18vw,190px);opacity:.5;}
+  .hero-crane.c2{right:6%;bottom:14%;width:min(18vw,190px);opacity:.5;transform:translateZ(15px);}
   .crane-line{stroke-dasharray:600;stroke-dashoffset:600;animation:draw 2.6s .3s ease forwards;}
   @keyframes draw{to{stroke-dashoffset:0;}}
 
-  .hero-inner{position:relative;z-index:2;width:100%;padding-bottom:clamp(48px,7vw,88px);}
+  .hero-inner{position:relative;z-index:2;width:100%;padding-bottom:clamp(48px,7vw,88px);will-change:transform;}
   .hero-badge{
     display:inline-flex;align-items:center;gap:.6em;
     padding:.5em 1em;border:1px solid var(--band-line);border-radius:999px;
@@ -431,56 +445,58 @@
 </div>
 
 <main id="top">
-  <section class="hero">
-    <div class="hero-sky" aria-hidden="true"></div>
-    <div class="hero-sun" aria-hidden="true"></div>
-    <div class="hero-grid" aria-hidden="true"></div>
-    <div class="hero-particle" style="width:5px;height:5px;left:18%;top:24%;animation-delay:0s;" aria-hidden="true"></div>
-    <div class="hero-particle" style="width:3px;height:3px;left:34%;top:40%;animation-delay:2s;" aria-hidden="true"></div>
-    <div class="hero-particle" style="width:4px;height:4px;left:58%;top:18%;animation-delay:4s;" aria-hidden="true"></div>
-    <div class="hero-particle" style="width:3px;height:3px;left:72%;top:34%;animation-delay:1s;" aria-hidden="true"></div>
-    <div class="hero-particle" style="width:6px;height:6px;left:44%;top:12%;animation-delay:3s;" aria-hidden="true"></div>
+  <section class="hero" id="hero">
+    <div class="hero-scene" id="heroScene">
+      <div class="hero-sky" aria-hidden="true"></div>
+      <div class="hero-sun" aria-hidden="true"></div>
+      <div class="hero-grid" aria-hidden="true"></div>
+      <div class="hero-particle" style="width:5px;height:5px;left:18%;top:24%;animation-delay:0s;" aria-hidden="true"></div>
+      <div class="hero-particle" style="width:3px;height:3px;left:34%;top:40%;animation-delay:2s;" aria-hidden="true"></div>
+      <div class="hero-particle" style="width:4px;height:4px;left:58%;top:18%;animation-delay:4s;" aria-hidden="true"></div>
+      <div class="hero-particle" style="width:3px;height:3px;left:72%;top:34%;animation-delay:1s;" aria-hidden="true"></div>
+      <div class="hero-particle" style="width:6px;height:6px;left:44%;top:12%;animation-delay:3s;" aria-hidden="true"></div>
 
-    <svg class="hero-crane c1" viewBox="0 0 220 260" fill="none" aria-hidden="true">
-      <line class="crane-line" x1="30" y1="260" x2="30" y2="20" stroke="currentColor" stroke-width="2"/>
-      <line class="crane-line" x1="30" y1="20" x2="200" y2="42" stroke="currentColor" stroke-width="2"/>
-      <line class="crane-line" x1="30" y1="20" x2="8" y2="46" stroke="currentColor" stroke-width="2"/>
-      <line class="crane-line" x1="30" y1="34" x2="60" y2="230" stroke="currentColor" stroke-width="1.2" stroke-opacity=".5"/>
-      <line class="crane-line" x1="30" y1="34" x2="0" y2="230" stroke="currentColor" stroke-width="1.2" stroke-opacity=".5"/>
-      <line class="crane-line" x1="178" y1="46" x2="178" y2="120" stroke="currentColor" stroke-width="1.4"/>
-      <line class="crane-line" x1="30" y1="20" x2="178" y2="46" stroke="currentColor" stroke-width="1" stroke-opacity=".5"/>
-    </svg>
-    <svg class="hero-crane c2" viewBox="0 0 220 260" fill="none" aria-hidden="true">
-      <line class="crane-line" x1="190" y1="260" x2="190" y2="10" stroke="currentColor" stroke-width="2"/>
-      <line class="crane-line" x1="190" y1="10" x2="30" y2="30" stroke="currentColor" stroke-width="2"/>
-      <line class="crane-line" x1="190" y1="10" x2="215" y2="34" stroke="currentColor" stroke-width="2"/>
-      <line class="crane-line" x1="55" y1="30" x2="55" y2="95" stroke="currentColor" stroke-width="1.4"/>
-    </svg>
-
-    <div class="hero-skyline" aria-hidden="true">
-      <svg viewBox="0 0 1200 260" preserveAspectRatio="none">
-        <rect x="0" y="120" width="70" height="140" fill="currentColor"/>
-        <rect x="80" y="70" width="46" height="190" fill="currentColor"/>
-        <rect x="140" y="150" width="60" height="110" fill="currentColor"/>
-        <rect x="210" y="40" width="54" height="220" fill="currentColor"/>
-        <rect x="275" y="100" width="40" height="160" fill="currentColor"/>
-        <polygon points="330,260 330,60 360,20 390,60 390,260" fill="currentColor"/>
-        <rect x="410" y="130" width="50" height="130" fill="currentColor"/>
-        <rect x="470" y="20" width="58" height="240" fill="currentColor"/>
-        <rect x="540" y="90" width="42" height="170" fill="currentColor"/>
-        <rect x="595" y="150" width="70" height="110" fill="currentColor"/>
-        <rect x="675" y="60" width="46" height="200" fill="currentColor"/>
-        <polygon points="735,260 735,50 765,10 795,50 795,260" fill="currentColor"/>
-        <rect x="810" y="120" width="54" height="140" fill="currentColor"/>
-        <rect x="875" y="80" width="40" height="180" fill="currentColor"/>
-        <rect x="925" y="160" width="66" height="100" fill="currentColor"/>
-        <rect x="1000" y="30" width="50" height="230" fill="currentColor"/>
-        <rect x="1060" y="110" width="44" height="150" fill="currentColor"/>
-        <rect x="1115" y="150" width="60" height="110" fill="currentColor"/>
+      <svg class="hero-crane c1" viewBox="0 0 220 260" fill="none" aria-hidden="true">
+        <line class="crane-line" x1="30" y1="260" x2="30" y2="20" stroke="currentColor" stroke-width="2"/>
+        <line class="crane-line" x1="30" y1="20" x2="200" y2="42" stroke="currentColor" stroke-width="2"/>
+        <line class="crane-line" x1="30" y1="20" x2="8" y2="46" stroke="currentColor" stroke-width="2"/>
+        <line class="crane-line" x1="30" y1="34" x2="60" y2="230" stroke="currentColor" stroke-width="1.2" stroke-opacity=".5"/>
+        <line class="crane-line" x1="30" y1="34" x2="0" y2="230" stroke="currentColor" stroke-width="1.2" stroke-opacity=".5"/>
+        <line class="crane-line" x1="178" y1="46" x2="178" y2="120" stroke="currentColor" stroke-width="1.4"/>
+        <line class="crane-line" x1="30" y1="20" x2="178" y2="46" stroke="currentColor" stroke-width="1" stroke-opacity=".5"/>
       </svg>
+      <svg class="hero-crane c2" viewBox="0 0 220 260" fill="none" aria-hidden="true">
+        <line class="crane-line" x1="190" y1="260" x2="190" y2="10" stroke="currentColor" stroke-width="2"/>
+        <line class="crane-line" x1="190" y1="10" x2="30" y2="30" stroke="currentColor" stroke-width="2"/>
+        <line class="crane-line" x1="190" y1="10" x2="215" y2="34" stroke="currentColor" stroke-width="2"/>
+        <line class="crane-line" x1="55" y1="30" x2="55" y2="95" stroke="currentColor" stroke-width="1.4"/>
+      </svg>
+
+      <div class="hero-skyline" aria-hidden="true">
+        <svg viewBox="0 0 1200 260" preserveAspectRatio="none">
+          <rect x="0" y="120" width="70" height="140" fill="currentColor"/>
+          <rect x="80" y="70" width="46" height="190" fill="currentColor"/>
+          <rect x="140" y="150" width="60" height="110" fill="currentColor"/>
+          <rect x="210" y="40" width="54" height="220" fill="currentColor"/>
+          <rect x="275" y="100" width="40" height="160" fill="currentColor"/>
+          <polygon points="330,260 330,60 360,20 390,60 390,260" fill="currentColor"/>
+          <rect x="410" y="130" width="50" height="130" fill="currentColor"/>
+          <rect x="470" y="20" width="58" height="240" fill="currentColor"/>
+          <rect x="540" y="90" width="42" height="170" fill="currentColor"/>
+          <rect x="595" y="150" width="70" height="110" fill="currentColor"/>
+          <rect x="675" y="60" width="46" height="200" fill="currentColor"/>
+          <polygon points="735,260 735,50 765,10 795,50 795,260" fill="currentColor"/>
+          <rect x="810" y="120" width="54" height="140" fill="currentColor"/>
+          <rect x="875" y="80" width="40" height="180" fill="currentColor"/>
+          <rect x="925" y="160" width="66" height="100" fill="currentColor"/>
+          <rect x="1000" y="30" width="50" height="230" fill="currentColor"/>
+          <rect x="1060" y="110" width="44" height="150" fill="currentColor"/>
+          <rect x="1115" y="150" width="60" height="110" fill="currentColor"/>
+        </svg>
+      </div>
     </div>
 
-    <div class="hero-inner container">
+    <div class="hero-inner container" id="heroInner">
       <div class="hero-badge">🏗️ Инъекционный ремонт трещин и гидроизоляция</div>
       <h1>
         <span class="line"><span>Ремонтируем</span></span>
@@ -798,6 +814,32 @@
 <script>
 (function(){
   var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // 3D hero motion — pointer-driven tilt with idle drift, lerped for a smooth premium feel
+  var hero = document.getElementById('hero');
+  var heroScene = document.getElementById('heroScene');
+  var heroInner = document.getElementById('heroInner');
+  if(hero && heroScene && heroInner && !reduced && window.matchMedia('(pointer: fine)').matches){
+    var maxTilt = 7, idleAmp = 1.6;
+    var tx = 0, ty = 0, cx = 0, cy = 0;
+    var t0 = performance.now();
+    hero.addEventListener('pointermove', function(e){
+      var r = hero.getBoundingClientRect();
+      tx = ((e.clientX - r.left) / r.width) * 2 - 1;
+      ty = ((e.clientY - r.top) / r.height) * 2 - 1;
+    });
+    hero.addEventListener('pointerleave', function(){ tx = 0; ty = 0; });
+    (function tick(now){
+      var idle = Math.sin((now - t0) / 2600) * idleAmp;
+      var targetY = tx * maxTilt + idle;
+      var targetX = -ty * maxTilt * 0.6;
+      cx += (targetX - cx) * 0.06;
+      cy += (targetY - cy) * 0.06;
+      heroScene.style.transform = 'rotateX(' + cx.toFixed(2) + 'deg) rotateY(' + cy.toFixed(2) + 'deg)';
+      heroInner.style.transform = 'translate3d(' + (-cy * 1.1).toFixed(2) + 'px,' + (-cx * 1.6).toFixed(2) + 'px,0)';
+      requestAnimationFrame(tick);
+    })(t0);
+  }
 
   // sticky nav
   var nav = document.getElementById('nav');
