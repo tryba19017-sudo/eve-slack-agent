@@ -71,10 +71,6 @@
   /* ============ RESET / BASE ============ */
   *,*::before,*::after{box-sizing:border-box;}
   html{scroll-behavior:smooth;}
-  @media (prefers-reduced-motion: reduce){
-    html{scroll-behavior:auto;}
-    *,*::before,*::after{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important;scroll-behavior:auto !important;}
-  }
   body{
     margin:0;
     background:var(--bg);
@@ -796,7 +792,6 @@
 
 <script>
 (function(){
-  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   var canHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
 
   // hero load-in + depth parallax (photo + content drift with mouse and scroll)
@@ -806,7 +801,7 @@
   if(heroPhoto){
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ heroPhoto.classList.add('is-loaded'); }); });
   }
-  if(heroSection && heroPhoto && heroInner && !reduced){
+  if(heroSection && heroPhoto && heroInner){
     var heroState = {scrollT:0, mx:0, my:0};
     var heroRaf = null;
     function paintHero(){
@@ -839,7 +834,7 @@
 
   // cursor-driven 3D tilt for cards
   function initTilt(selector, max){
-    if(!canHover || reduced) return;
+    if(!canHover) return;
     document.querySelectorAll(selector).forEach(function(card){
       var raf = null;
       card.addEventListener('pointermove', function(e){
@@ -918,7 +913,6 @@
   function animateCount(el){
     var target = parseInt(el.getAttribute('data-count'), 10);
     var suffix = el.getAttribute('data-suffix') || '';
-    if(reduced){ el.textContent = target + suffix; return; }
     var start = null, duration = 1400;
     function step(ts){
       if(!start) start = ts;
