@@ -235,6 +235,12 @@
     0%,100%{transform:translateY(0) translateX(0);opacity:.15;}
     50%{transform:translateY(-38px) translateX(12px);opacity:.65;}
   }
+  .webgl-hero{
+    position:absolute;inset:0;width:100%;height:100%;
+    opacity:0;transition:opacity 1.6s ease;
+    pointer-events:none;
+  }
+  .webgl-hero.is-ready{opacity:1;}
   .hero-skyline{position:absolute;left:0;right:0;bottom:0;height:46%;color:#0a0a0d;}
   .hero-skyline svg{width:100%;height:100%;display:block;}
   .hero-crane{position:absolute;color:var(--band-fg);opacity:.85;}
@@ -507,6 +513,8 @@
     <div class="hero-particle" style="width:4px;height:4px;left:58%;top:18%;animation-delay:4s;" aria-hidden="true"></div>
     <div class="hero-particle" style="width:3px;height:3px;left:72%;top:34%;animation-delay:1s;" aria-hidden="true"></div>
     <div class="hero-particle" style="width:6px;height:6px;left:44%;top:12%;animation-delay:3s;" aria-hidden="true"></div>
+
+    <canvas class="webgl-hero" id="webglHero" aria-hidden="true"></canvas>
 
     <svg class="hero-crane c1" viewBox="0 0 220 260" fill="none" aria-hidden="true">
       <line class="crane-line" x1="30" y1="260" x2="30" y2="20" stroke="currentColor" stroke-width="2"/>
@@ -1000,6 +1008,178 @@
     form.reset();
     setTimeout(function(){ btn.textContent = original; }, 2600);
   });
+})();
+</script>
+
+<!-- three.js r169 (MIT) vendored locally in site/vendor/ — no external CDN calls -->
+<script type="module">
+import * as THREE from './vendor/three.module.min.js';
+
+(function(){
+  var canvas = document.getElementById('webglHero');
+  var heroEl = document.querySelector('.hero');
+  var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(!canvas || !heroEl || reduced) return;
+
+  var gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+  if(!gl) return;
+
+  var isSmall = window.innerWidth < 720;
+  var SHARD_COUNT = isSmall ? 14 : 26;
+  var LINK_DIST = 4.4;
+
+  var renderer = new THREE.WebGLRenderer({ canvas: canvas, alpha: true, antialias: true, powerPreference: 'high-performance' });
+  renderer.setClearColor(0x000000, 0);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+  camera.position.set(0, 0, 13);
+
+  scene.add(new THREE.AmbientLight(0x2a2010, 0.9));
+  var keyLight = new THREE.PointLight(0xe8b64f, 3.2, 40, 2);
+  keyLight.position.set(6, 5, 9);
+  scene.add(keyLight);
+  var rimLight = new THREE.PointLight(0x8a641c, 1.6, 40, 2);
+  rimLight.position.set(-7, -3, 5);
+  scene.add(rimLight);
+
+  var geoPool = [
+    new THREE.IcosahedronGeometry(0.46, 0),
+    new THREE.OctahedronGeometry(0.42, 0),
+    new THREE.TetrahedronGeometry(0.5, 0)
+  ];
+  var material = new THREE.MeshStandardMaterial({
+    color: 0xe2ac47, metalness: 0.88, roughness: 0.28,
+    emissive: 0x3a2708, emissiveIntensity: 0.55, flatShading: true
+  });
+
+  function glowTexture(){
+    var c = document.createElement('canvas');
+    c.width = c.height = 128;
+    var ctx = c.getContext('2d');
+    var g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
+    g.addColorStop(0, 'rgba(255,224,150,0.9)');
+    g.addColorStop(0.4, 'rgba(232,182,79,0.35)');
+    g.addColorStop(1, 'rgba(232,182,79,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 128, 128);
+    return new THREE.CanvasTexture(c);
+  }
+  var glowMap = glowTexture();
+  var glowMaterial = new THREE.SpriteMaterial({ map: glowMap, color: 0xe8b64f, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending });
+
+  var group = new THREE.Group();
+  scene.add(group);
+
+  var shards = [];
+  for(var i = 0; i < SHARD_COUNT; i++){
+    var geo = geoPool[i % geoPool.length];
+    var mesh = new THREE.Mesh(geo, material);
+    var px = (Math.random() - 0.5) * 15.5;
+    var py = (Math.random() - 0.5) * 9;
+    var pz = (Math.random() - 0.5) * 6 - 1;
+    mesh.position.set(px, py, pz);
+    mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+    group.add(mesh);
+
+    var glow = new THREE.Sprite(glowMaterial);
+    glow.scale.setScalar(1.6 + Math.random() * 0.8);
+    glow.position.copy(mesh.position);
+    group.add(glow);
+
+    shards.push({
+      mesh: mesh, glow: glow, basePos: mesh.position.clone(),
+      spin: new THREE.Vector3((Math.random() - 0.5) * 0.006, (Math.random() - 0.5) * 0.006, (Math.random() - 0.5) * 0.006),
+      phase: Math.random() * Math.PI * 2,
+      speed: 0.4 + Math.random() * 0.5
+    });
+  }
+
+  // gold constellation lines between nearby shards
+  var linkPairs = [];
+  for(var a = 0; a < shards.length; a++){
+    for(var b = a + 1; b < shards.length; b++){
+      if(shards[a].basePos.distanceTo(shards[b].basePos) < LINK_DIST) linkPairs.push([a, b]);
+    }
+  }
+  var lineGeo = new THREE.BufferGeometry();
+  var linePositions = new Float32Array(linkPairs.length * 6);
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+  var lineMaterial = new THREE.LineBasicMaterial({ color: 0xe8b64f, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending });
+  var lines = new THREE.LineSegments(lineGeo, lineMaterial);
+  group.add(lines);
+
+  function resize(){
+    var w = heroEl.clientWidth, h = heroEl.clientHeight;
+    if(!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  var mouseX = 0, mouseY = 0;
+  window.addEventListener('pointermove', function(e){
+    var r = heroEl.getBoundingClientRect();
+    var nx = ((e.clientX - r.left) / r.width - 0.5) * 2;
+    var ny = ((e.clientY - r.top) / r.height - 0.5) * 2;
+    mouseX = Math.max(-1, Math.min(1, nx));
+    mouseY = Math.max(-1, Math.min(1, ny));
+  }, { passive: true });
+
+  var running = true;
+  var io = new IntersectionObserver(function(entries){
+    running = entries[0].isIntersecting;
+    if(running) clock.getDelta();
+  }, { threshold: 0.05 });
+  io.observe(heroEl);
+  document.addEventListener('visibilitychange', function(){ running = running && !document.hidden; });
+
+  var clock = new THREE.Clock();
+  var camX = 0, camY = 0;
+
+  function tick(){
+    requestAnimationFrame(tick);
+    if(!running || document.hidden) return;
+    var t = clock.getElapsedTime();
+
+    for(var i = 0; i < shards.length; i++){
+      var s = shards[i];
+      s.mesh.rotation.x += s.spin.x;
+      s.mesh.rotation.y += s.spin.y;
+      s.mesh.rotation.z += s.spin.z;
+      var bob = Math.sin(t * s.speed + s.phase) * 0.22;
+      s.mesh.position.y = s.basePos.y + bob;
+      s.mesh.position.x = s.basePos.x + Math.cos(t * s.speed * 0.6 + s.phase) * 0.12;
+      s.glow.position.copy(s.mesh.position);
+    }
+    var pos = lineGeo.attributes.position.array;
+    for(var p = 0; p < linkPairs.length; p++){
+      var pa = shards[linkPairs[p][0]].mesh.position;
+      var pb = shards[linkPairs[p][1]].mesh.position;
+      var o = p * 6;
+      pos[o] = pa.x; pos[o+1] = pa.y; pos[o+2] = pa.z;
+      pos[o+3] = pb.x; pos[o+4] = pb.y; pos[o+5] = pb.z;
+    }
+    lineGeo.attributes.position.needsUpdate = true;
+
+    camX += (mouseX * 1.1 - camX) * 0.04;
+    camY += (-mouseY * 0.7 - camY) * 0.04;
+    camera.position.x = camX;
+    camera.position.y = camY;
+    camera.lookAt(0, 0, 0);
+
+    renderer.render(scene, camera);
+  }
+
+  renderer.render(scene, camera);
+  canvas.classList.add('is-ready');
+  requestAnimationFrame(tick);
 })();
 </script>
 </body>
