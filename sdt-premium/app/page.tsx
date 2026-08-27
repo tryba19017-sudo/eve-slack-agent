@@ -91,6 +91,7 @@ export default function Home() {
   const [formState, setFormState] = useState<"idle" | "ready">("idle");
   const [siteContent, setSiteContent] = useState<SiteContent>(defaultSiteContent);
   const heroRef = useRef<HTMLElement>(null);
+  const progressRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -128,6 +129,25 @@ export default function Home() {
     return () => { revealObserver.disconnect(); sectionObserver.disconnect(); };
   }, []);
 
+  useEffect(() => {
+    let frame = 0;
+    const updateProgress = () => {
+      frame = 0;
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      const ratio = max > 0 ? Math.min(1, Math.max(0, window.scrollY / max)) : 0;
+      progressRef.current?.style.setProperty("--progress", String(ratio * 100));
+    };
+    const onScroll = () => { if (!frame) frame = requestAnimationFrame(updateProgress); };
+    updateProgress();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      if (frame) cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const trackHeroLight = (event: React.PointerEvent<HTMLElement>) => {
     const element = heroRef.current;
     if (!element) return;
@@ -156,8 +176,11 @@ export default function Home() {
   };
 
   return (
+    <>
+    <div className="grain-overlay" aria-hidden="true" />
     <SidebarProvider style={{ "--sidebar-width": "18.5rem" } as React.CSSProperties} className="sdt-app">
       <Sidebar collapsible="offcanvas" className="sdt-sidebar">
+        <div className="sidebar-progress" ref={progressRef} aria-hidden="true" />
         <SidebarHeader className="sidebar-head">
           <a className="brand" href="#main" aria-label="СДТ — на главную">
             <span className="brand-mark">СДТ</span>
@@ -310,7 +333,7 @@ export default function Home() {
             </div>
             <div className="project-list">
               {siteContent.projects.map((project, index) => (
-                <article className="project reveal" key={project.id}>
+                <article className="project reveal" key={project.id} style={{ "--reveal-index": index % 4 } as React.CSSProperties}>
                   <div className="project-image"><img src={project.image} alt={`${project.title} — выполненный объект СДТ`} /><span>0{index + 1}</span></div>
                   <div className="project-copy">
                     <p className="project-type">{project.type}</p><h3>{project.title}</h3>
@@ -343,9 +366,9 @@ export default function Home() {
               <h2>Наш офис<br />в Москве</h2>
               <p className="section-lead">Здесь команда готовит расчёты, проектные решения и документацию для объектов. Адрес: Каширский проезд, д. 5, офис 307.</p>
             </div>
-            <div className="office-gallery reveal">
+            <div className="office-gallery">
               {siteContent.officePhotos.map((photo, index) => (
-                <figure key={photo.id} className={`office-photo office-photo-${index + 1}`}>
+                <figure key={photo.id} className={`office-photo office-photo-${index + 1} reveal`} style={{ "--reveal-index": index % 4 } as React.CSSProperties}>
                   <img src={photo.src} alt={photo.alt} loading="lazy" />
                   <figcaption><span>{String(index + 1).padStart(2, "0")}</span>{photo.label}</figcaption>
                 </figure>
@@ -356,9 +379,9 @@ export default function Home() {
               <div><p className="eyebrow">Жизнь компании</p><h3>Наши мероприятия</h3></div>
               <p>Рабочие встречи, командные события и совместная работа специалистов на объектах.</p>
             </div>
-            <div className="events-grid reveal">
-              {siteContent.events.map((event) => (
-                <article key={event.id}>
+            <div className="events-grid">
+              {siteContent.events.map((event, index) => (
+                <article key={event.id} className="reveal" style={{ "--reveal-index": index } as React.CSSProperties}>
                   <div><img src={event.src} alt={event.title} loading="lazy" /></div>
                   <span>{event.tag}</span><h4>{event.title}</h4>
                 </article>
@@ -372,9 +395,9 @@ export default function Home() {
               <h2>Наша команда</h2>
               <p className="section-lead">Инженеры, проектировщики и производственные специалисты работают как единая команда — от первого выезда до сдачи объекта.</p>
             </div>
-            <div className="team-grid reveal">
+            <div className="team-grid">
               {siteContent.team.map((member, index) => (
-                <article key={member.id}>
+                <article key={member.id} className="reveal" style={{ "--reveal-index": index } as React.CSSProperties}>
                   <div className="team-image"><img src={member.src} alt={member.title} loading="lazy" /><span>0{index + 1}</span></div>
                   <h3>{member.title}</h3><p>{member.copy}</p>
                 </article>
@@ -392,9 +415,9 @@ export default function Home() {
                 <p><span>04</span>Свидетельства СРО — проектирование и строительство</p>
               </div>
             </div>
-            <div className="letters-grid reveal">
+            <div className="letters-grid">
               {trustLetters.map((letter, index) => (
-                <figure key={letter.name}>
+                <figure key={letter.name} className="reveal" style={{ "--reveal-index": index % 3 } as React.CSSProperties}>
                   <a href={letter.src} target="_blank" rel="noreferrer" aria-label={`Открыть письмо: ${letter.name}`}>
                     <img src={letter.src} alt={`${letter.type}: ${letter.name}`} loading="lazy" />
                     <span className="letter-open"><ArrowUpRight /></span>
@@ -416,9 +439,9 @@ export default function Home() {
               <h2>Новости<br />и статьи</h2>
               <p className="section-lead">Практические материалы об усилении, гидроизоляции, обследовании и восстановлении конструкций.</p>
             </div>
-            <div className="knowledge-grid reveal">
+            <div className="knowledge-grid">
               {knowledgeCards.map((article, index) => (
-                <article key={article.title}><span>{article.label} / 0{index + 1}</span><h3>{article.title}</h3><p>{article.copy}</p><a href="#contacts">Задать вопрос инженеру <ArrowUpRight /></a></article>
+                <article key={article.title} className="reveal" style={{ "--reveal-index": index } as React.CSSProperties}><span>{article.label} / 0{index + 1}</span><h3>{article.title}</h3><p>{article.copy}</p><a href="#contacts">Задать вопрос инженеру <ArrowUpRight /></a></article>
               ))}
             </div>
           </section>
@@ -493,5 +516,6 @@ export default function Home() {
         </footer>
       </SidebarInset>
     </SidebarProvider>
+    </>
   );
 }
