@@ -325,7 +325,7 @@ button, input, select, textarea { font: inherit; }
 .service-card { --card-index: 0; position: sticky; top: calc(5rem + (var(--card-index) * .55rem)); min-height: 31rem; display: grid; grid-template-columns: 5rem minmax(16rem,.85fr) 1.15fr 4rem; gap: clamp(1rem,3vw,3rem); align-items: center; margin-bottom: 1.35rem; padding: clamp(1.2rem,3vw,2.8rem); color: white; background: var(--ink-soft); border: 1px solid rgba(255,255,255,.12); box-shadow: 0 -1.5rem 3rem rgba(32,33,30,.14); }
 .service-card:nth-child(even) { background: #3a3b35; }
 .service-card-number { align-self: start; color: var(--acid); font: 500 .72rem/1.2 monospace; }
-.service-card-copy h3 { max-width: 28rem; margin: 0; font-size: clamp(2rem,4vw,4.7rem); line-height: .95; font-weight: 590; letter-spacing: -.065em; }
+.service-card-copy h3 { max-width: 28rem; margin: 0; font-size: clamp(2rem,4vw,4.7rem); line-height: .95; font-weight: 590; letter-spacing: -.065em; hyphens: auto; overflow-wrap: break-word; }
 .service-card-copy p { max-width: 28rem; margin: 1.6rem 0; color: rgba(255,255,255,.62); font-size: clamp(1rem,1.35vw,1.2rem); line-height: 1.55; }
 .service-card-copy span { color: var(--acid); font-size: .68rem; letter-spacing: .09em; text-transform: uppercase; }
 .service-card-image { height: 24rem; overflow: hidden; background: #333; }
