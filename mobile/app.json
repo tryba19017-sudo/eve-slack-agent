@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "FitTrainer",
+    "slug": "fittrainer-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fittrainer.app",
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "Приложению нужен доступ к календарю, чтобы автоматически добавлять записи на тренировки.",
+        "NSCalendarsWriteOnlyAccessUsageDescription": "Приложению нужен доступ к календарю, чтобы автоматически добавлять записи на тренировки."
+      }
+    },
+    "android": {
+      "package": "com.fittrainer.app",
+      "permissions": ["READ_CALENDAR", "WRITE_CALENDAR"]
+    },
+    "plugins": [
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Приложению нужен доступ к календарю, чтобы автоматически добавлять записи на тренировки."
+        }
+      ]
+    ]
+  }
+}
