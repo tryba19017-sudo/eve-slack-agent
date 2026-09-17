@@ -1,7 +1,38 @@
-This is a Slack agent template for [eve](https://eve.dev).
+This is a Slack agent for [eve](https://eve.dev) that drafts **коммерческие предложения (КП)** for Panda Core — injection crack repair and concrete waterproofing.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?connect=%5B%7B%22type%22%3A%22slack%22%2C%22env%22%3A%22SLACK_CONNECTOR%22%2C%22triggers%22%3Atrue%2C%22triggerPath%22%3A%22%2Feve%2Fv1%2Fslack%22%7D%5D&demo-description=An%20eve%20template%20for%20Slack%20agents%20with%20webhook%20handling%2C%20Vercel%20Connect%2C%20a%20starter%20agent%2C%20and%20an%20example%20tool%20ready%20to%20deploy%20on%20Vercel.&demo-image=https%3A%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F2mBY0MIfBcFytW99mnvinL%2Ffc3917c584ab1389af305788b8050f5d%2Fimage__1_.png&demo-title=eve%20Slack%20Agent&demo-url=https%3A%2F%2Fvercel.com%2Fkb%2Fguide%2Feve-slack-agent-starter&project-name=eve%20Slack%20Agent&repository-name=eve-slack-agent&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Feve-examples%2Ftree%2Fmain%2Feve-slack-agent-template)
+## What the agent does
 
+In Slack (or `pnpm dev`), describe the object. The agent:
+
+1. Collects the intake in one batch of questions
+2. Saves a session draft
+3. Prices line items from the catalog (`agent/lib/catalog.ts`)
+4. Applies site coefficients (height, water, access, season, urgency)
+5. Returns a formatted Russian КП with VAT 22%
+
+It never invents totals: money comes from `calculate_estimate`.
+
+### Information it asks for
+
+**Required**
+
+- Customer company **or** contact name
+- Object address **or** a short description
+- Scope: linear meters of cracks, m² of waterproofing, or piece counts
+
+**Optional, but it changes the number**
+
+- Object type (residential, business center, parking, industrial, bridge, underground)
+- Structure (wall, slab, joint, foundation, column, stylobate)
+- Water in the crack: dry / damp / active leak
+- Working height: 0–5 / 5–15 / 15–30 / 30+ m
+- Access: easy / restricted / confined
+- Season (above +5 °C or winter)
+- Urgency (planned / rush / 24/7 emergency)
+- Whether the building must stay in operation
+- Deadline, distance from Moscow (km), VAT mode, payment terms, INN
+
+A public intake form with the same rates lives on the site under **КП**.
 
 ## Getting Started
 
@@ -18,17 +49,24 @@ Then, run the development server:
 pnpm dev
 ```
 
-You can start editing the agent by modifying `agent/agent.ts`. Its behavior is defined in `agent/instructions.md`, and tools live in `agent/tools/`. The agent auto-updates as you edit the files.
+Checks:
 
-This project uses the Eve framework's bundled guides — see `node_modules/eve/dist/docs/public/` after installing dependencies.
+```bash
+pnpm typecheck
+pnpm test
+```
+
+Agent files:
+
+- `agent/instructions.md` — identity and standing rules
+- `agent/skills/create_commercial_proposal.md` — КП procedure
+- `agent/tools/` — catalog, draft, estimate, formatter
+- `agent/lib/` — rates, coefficients, document layout
+
+This project uses the Eve framework's bundled guides — see `node_modules/eve/docs/` after installing dependencies.
 
 ## Learn More
 
-To learn more about eve, take a look at the following resources:
-
-- [eve documentation](https://eve.dev/docs) - learn about eve features and API.
-- [Vercel Connect](https://vercel.com/docs) - manages the Slack channel's credentials in this template.
-
-You can check out [the eve GitHub repository](https://github.com/vercel/eve) - your feedback and contributions are welcome!
-
-<img width="1552" height="1013" alt="Image Edit Request" src="https://github.com/user-attachments/assets/115c947d-1b7d-4464-8d57-91f2dd8758f0" />
+- [eve documentation](https://eve.dev/docs)
+- [Vercel Connect](https://vercel.com/docs) — Slack credentials for this template
+- [eve GitHub repository](https://github.com/vercel/eve)

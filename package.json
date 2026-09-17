@@ -10,7 +10,8 @@
     "build": "eve build",
     "dev": "eve dev",
     "start": "eve start",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "test": "tsx agent/lib/estimate.check.ts"
   },
   "dependencies": {
     "@vercel/connect": "0.8.0",
@@ -20,6 +21,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
+    "tsx": "^4.23.13",
     "typescript": "7.0.2"
   }
 }

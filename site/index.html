@@ -348,6 +348,33 @@
   @media (max-width:900px){ .obj-grid{grid-template-columns:1fr 1fr;} }
   @media (max-width:560px){ .obj-grid{grid-template-columns:1fr;} }
 
+  /* ============ KP ============ */
+  .kp-wrap{display:grid;grid-template-columns:1fr 1.15fr;gap:28px;align-items:start;}
+  .kp-need{background:var(--bg-raised);border:1px solid var(--line);border-radius:var(--radius);padding:28px;}
+  .kp-need h3{font-family:var(--font-body);font-weight:700;font-size:1.05rem;text-transform:none;letter-spacing:0;margin-bottom:14px;}
+  .kp-need ul{display:flex;flex-direction:column;gap:10px;}
+  .kp-need li{display:flex;gap:10px;align-items:flex-start;color:var(--fg-muted);font-size:.92rem;}
+  .kp-need li strong{color:var(--fg);font-weight:600;}
+  .kp-need svg{width:18px;height:18px;color:var(--accent);flex:none;margin-top:3px;}
+  .kp-form{background:var(--bg-raised);border:1px solid var(--line);border-radius:var(--radius);padding:28px;}
+  .kp-form .field label{color:var(--fg-muted);}
+  .kp-form .field input,.kp-form .field select{
+    background:var(--bg);border:1px solid var(--line);color:var(--fg);
+  }
+  .kp-form .field input:focus,.kp-form .field select:focus{border-color:var(--accent);outline:none;}
+  .kp-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+  .kp-preview{
+    margin-top:22px;padding:22px;border-radius:var(--radius);
+    border:1px dashed var(--line);background:var(--bg-sunken);
+    font-size:.92rem;white-space:pre-wrap;line-height:1.5;
+    font-family:var(--font-mono);color:var(--fg);
+    min-height:8rem;
+  }
+  .kp-preview.is-empty{color:var(--fg-muted);white-space:normal;}
+  .kp-total{margin-top:12px;font-family:var(--font-mono);font-size:1.15rem;color:var(--accent);}
+  .kp-form .btn{width:100%;margin-top:6px;}
+  @media (max-width:900px){ .kp-wrap,.kp-grid{grid-template-columns:1fr;} }
+
   /* ============ CTA / FORM ============ */
   .cta-wrap{display:grid;grid-template-columns:1.1fr 1fr;gap:56px;align-items:start;}
   .cta-text h2{font-size:clamp(2rem,4vw,2.8rem);}
@@ -407,6 +434,7 @@
       <a href="#process">Как мы работаем</a>
       <a href="#guarantees">Гарантии</a>
       <a href="#objects">Объекты</a>
+      <a href="#kp">КП</a>
       <a href="#contacts">Контакты</a>
     </nav>
     <div class="nav-cta">
@@ -427,6 +455,7 @@
   <a href="#process">Процесс</a>
   <a href="#guarantees">Гарантии</a>
   <a href="#objects">Объекты</a>
+  <a href="#kp">КП</a>
   <a href="#contacts">Контакты</a>
 </div>
 
@@ -489,7 +518,7 @@
       </h1>
       <p class="hero-sub">Инъекционная герметизация и восстановление несущих конструкций полимерными и цементными составами. Работаем на высотках, паркингах и промышленных объектах — с гарантией до 10 лет.</p>
       <div class="hero-actions">
-        <a href="#contacts" class="btn">Бесплатный расчёт</a>
+        <a href="#kp" class="btn">Бесплатный расчёт</a>
         <a href="#process" class="btn btn-ghost">Как мы работаем</a>
       </div>
       <div class="hero-stats">
@@ -727,6 +756,81 @@
     </div>
   </section>
 
+  <section class="section" id="kp" style="padding-top:0;">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Коммерческое предложение</span>
+        <h2>Соберём КП по объекту</h2>
+        <p class="prose fg-muted">Агент в Slack считает смету по прайсу Panda Core. Ниже — те же расценки: заполните поля и получите предварительный расчёт. Твёрдая цена — после выезда инженера.</p>
+      </div>
+      <div class="kp-wrap">
+        <div class="kp-need reveal">
+          <h3>Что нужно для расчёта</h3>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Обязательно.</strong> Компания или ФИО, адрес объекта, объём: п.м. трещин или м² гидроизоляции.</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Влияет на цену.</strong> Вода в трещине, высота, доступ, зима, срочность, плечо дальше 40 км.</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>По желанию.</strong> ИНН, график оплаты, можно ли останавливать объект, срок.</span></li>
+          </ul>
+          <p class="fg-muted" style="margin-top:18px;font-size:.9rem;">В чате напишите, например: «Паркинг на Лесной, течёт деформационный шов 28 метров, высота 4 м, работы без остановки».</p>
+        </div>
+        <form class="kp-form reveal" id="kpForm">
+          <div class="kp-grid">
+            <div class="field"><label for="kp-company">Компания или контакт</label><input id="kp-company" name="company" type="text" placeholder="ООО «Заказчик»" required></div>
+            <div class="field"><label for="kp-address">Адрес объекта</label><input id="kp-address" name="address" type="text" placeholder="Москва, ул. Лесная, 1" required></div>
+            <div class="field"><label for="kp-type">Тип объекта</label>
+              <select id="kp-type" name="objectType">
+                <option value="parking">Паркинг / стилобат</option>
+                <option value="residential">Жилой комплекс</option>
+                <option value="business_center">Бизнес-центр</option>
+                <option value="industrial">Промышленный объект</option>
+                <option value="bridge">Мост / путепровод</option>
+                <option value="underground">Подземное сооружение</option>
+              </select>
+            </div>
+            <div class="field"><label for="kp-service">Вид работ</label>
+              <select id="kp-service" name="service">
+                <option value="polymer_injection_pu">Инъекция ПУ-смолой, п.м.</option>
+                <option value="polymer_injection_epoxy">Инъекция эпоксидом, п.м.</option>
+                <option value="joint_waterproofing">Гидроизоляция швов, п.м.</option>
+                <option value="cement_injection">Цементная инъекция, п.м.</option>
+                <option value="parking_waterproofing">Гидроизоляция паркинга, м²</option>
+                <option value="underground_waterproofing">Гидроизоляция подземных частей, м²</option>
+                <option value="curtain_grouting">Противофильтрационная завеса, м²</option>
+                <option value="cfrp_strengthening">Усиление углеродной лентой, м²</option>
+              </select>
+            </div>
+            <div class="field"><label for="kp-qty">Объём</label><input id="kp-qty" name="quantity" type="number" min="1" step="0.1" value="40" required></div>
+            <div class="field"><label for="kp-water">Вода</label>
+              <select id="kp-water" name="water">
+                <option value="dry">Сухо</option>
+                <option value="damp">Влажно</option>
+                <option value="active_leak">Активная течь</option>
+              </select>
+            </div>
+            <div class="field"><label for="kp-height">Высота</label>
+              <select id="kp-height" name="height">
+                <option value="0-5">до 5 м</option>
+                <option value="5-15">5–15 м</option>
+                <option value="15-30">15–30 м</option>
+                <option value="30+">свыше 30 м</option>
+              </select>
+            </div>
+            <div class="field"><label for="kp-access">Доступ</label>
+              <select id="kp-access" name="access">
+                <option value="easy">Свободный</option>
+                <option value="restricted">Без остановки объекта</option>
+                <option value="confined">Тесно / ночное окно</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn">Рассчитать предварительное КП</button>
+          <p class="kp-total" id="kpTotal" hidden></p>
+          <pre class="kp-preview is-empty" id="kpPreview">Заполните форму — здесь появится текст коммерческого предложения.</pre>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <section class="section band" id="contacts">
     <div class="container">
       <div class="cta-wrap">
@@ -780,7 +884,7 @@
       <div class="footer-nav">
         <div class="footer-col">
           <h4>Компания</h4>
-          <ul><li><a href="#services">Услуги</a></li><li><a href="#process">Как мы работаем</a></li><li><a href="#guarantees">Гарантии</a></li><li><a href="#objects">Объекты</a></li></ul>
+          <ul><li><a href="#services">Услуги</a></li><li><a href="#process">Как мы работаем</a></li><li><a href="#guarantees">Гарантии</a></li><li><a href="#objects">Объекты</a></li><li><a href="#kp">Коммерческое предложение</a></li></ul>
         </div>
         <div class="footer-col">
           <h4>Контакты</h4>
@@ -885,6 +989,90 @@
     form.reset();
     setTimeout(function(){ btn.textContent = original; }, 2600);
   });
+
+  // KP preview — rates must stay in sync with agent/lib/catalog.ts
+  var KP_SERVICES = {
+    polymer_injection_pu: { name: "Инъекция полиуретановой смолой", unit: "п.м.", price: 4900, prep: true },
+    polymer_injection_epoxy: { name: "Инъекция эпоксидной смолой", unit: "п.м.", price: 5600, prep: true },
+    joint_waterproofing: { name: "Гидроизоляция деформационных и рабочих швов", unit: "п.м.", price: 4100, prep: true },
+    cement_injection: { name: "Цементная инъекция пустот", unit: "п.м.", price: 3200, prep: true },
+    parking_waterproofing: { name: "Гидроизоляция паркинга и стилобата", unit: "м²", price: 4400, prep: false },
+    underground_waterproofing: { name: "Гидроизоляция подземных частей", unit: "м²", price: 5800, prep: false },
+    curtain_grouting: { name: "Противофильтрационная завеса", unit: "м²", price: 7200, prep: false },
+    cfrp_strengthening: { name: "Усиление углеродной лентой (CFRP)", unit: "м²", price: 9400, prep: false }
+  };
+  var KP_HEIGHT = { "0-5": 1, "5-15": 1.15, "15-30": 1.3, "30+": 1.5 };
+  var KP_WATER = { dry: 1, damp: 1.12, active_leak: 1.35 };
+  var KP_ACCESS = { easy: 1, restricted: 1.18, confined: 1.4 };
+  var KP_TYPE = {
+    parking: "паркинг / стилобат",
+    residential: "жилой комплекс",
+    business_center: "бизнес-центр",
+    industrial: "промышленный объект",
+    bridge: "мост / путепровод",
+    underground: "подземное сооружение"
+  };
+
+  function kpMoney(n){
+    return new Intl.NumberFormat("ru-RU", { style: "currency", currency: "RUB", maximumFractionDigits: 0 }).format(Math.round(n));
+  }
+
+  var kpForm = document.getElementById("kpForm");
+  var kpPreview = document.getElementById("kpPreview");
+  var kpTotal = document.getElementById("kpTotal");
+  if(kpForm){
+    kpForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      var company = document.getElementById("kp-company").value.trim();
+      var address = document.getElementById("kp-address").value.trim();
+      var objectType = document.getElementById("kp-type").value;
+      var serviceKey = document.getElementById("kp-service").value;
+      var qty = parseFloat(document.getElementById("kp-qty").value);
+      var water = document.getElementById("kp-water").value;
+      var height = document.getElementById("kp-height").value;
+      var access = document.getElementById("kp-access").value;
+      if(!company || !address || !Number.isFinite(qty) || qty <= 0){
+        kpPreview.classList.add("is-empty");
+        kpPreview.textContent = "Укажите компанию, адрес и объём больше нуля.";
+        kpTotal.hidden = true;
+        return;
+      }
+      var service = KP_SERVICES[serviceKey];
+      var k = KP_HEIGHT[height] * KP_WATER[water] * KP_ACCESS[access];
+      var lines = [{ name: "Выезд инженера и диагностика", qty: 1, unit: "выезд", amount: 0 }];
+      if(service.prep){
+        lines.push({ name: "Разделка и подготовка трещины", qty: qty, unit: "п.м.", amount: qty * 850 * k });
+      }
+      lines.push({ name: service.name, qty: qty, unit: service.unit, amount: qty * service.price * k });
+      var net = lines.reduce(function(sum, line){ return sum + line.amount; }, 0);
+      var vat = net * 0.22;
+      var total = net + vat;
+      var body = [
+        "Panda Core — предварительное коммерческое предложение",
+        "Заказчик: " + company,
+        "Объект: " + address + ", " + KP_TYPE[objectType],
+        "Коэффициент условий: ×" + (Math.round(k * 100) / 100),
+        ""
+      ];
+      lines.forEach(function(line, i){
+        body.push((i + 1) + ". " + line.name + " — " + line.qty + " " + line.unit + " = " + kpMoney(line.amount));
+      });
+      body.push("");
+      body.push("Без НДС: " + kpMoney(net));
+      body.push("НДС 22%: " + kpMoney(vat));
+      body.push("Итого: " + kpMoney(total));
+      body.push("");
+      body.push("Ориентир до выезда инженера. Гарантия до 10 лет. Действует 30 дней.");
+      if(total < 80000){
+        body.push("Итог ниже минимума выезда бригады 80 000 ₽ — в договоре будет выравнено.");
+      }
+      kpPreview.classList.remove("is-empty");
+      kpPreview.textContent = body.join("\n");
+      kpTotal.hidden = false;
+      kpTotal.textContent = "Итого к оплате: " + kpMoney(total) + " с НДС 22%";
+      kpPreview.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
+    });
+  }
 })();
 </script>
 </body>
