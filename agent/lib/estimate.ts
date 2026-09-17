@@ -1,173 +1,148 @@
-import { MINIMUM_ORDER_RUB, VAT_RATE } from "./company";
-import {
-  ACCESS_COEFFICIENT,
-  type AccessLevel,
-  getCatalogItem,
-  HEIGHT_COEFFICIENT,
-  type HeightBand,
-  SEASON_COEFFICIENT,
-  type Season,
-  URGENCY_COEFFICIENT,
-  type Urgency,
-  VAT_MODES,
-  type VatMode,
-  WATER_COEFFICIENT,
-  type WaterCondition,
-} from "./catalog";
+import { getMaterial, getWork, type VatMode, type WorkCode } from "./catalog";
+import { LABOR_OVERHEAD_RATE, VAT_RATE } from "./company";
 
-export type EstimateLineInput = {
-  serviceCode: string;
+export type WorkLineInput = {
+  workCode: WorkCode | string;
   quantity: number;
   note?: string;
-  unitPriceOverrideRub?: number;
 };
 
-export type EstimateCoefficients = {
-  heightBand: HeightBand;
-  water: WaterCondition;
-  access: AccessLevel;
-  season: Season;
-  urgency: Urgency;
-};
-
-export type EstimateLine = {
-  serviceCode: string;
+export type MaterialLine = {
+  materialCode: string;
   name: string;
   unit: string;
   quantity: number;
   unitPriceRub: number;
-  coefficientsApplied: number;
   amountRub: number;
   note?: string;
 };
 
+export type WorkLine = {
+  workCode: string;
+  name: string;
+  unit: string;
+  quantity: number;
+  laborUnitRub: number;
+  overheadUnitRub: number;
+  laborUnitWithOverheadRub: number;
+  laborAmountRub: number;
+  materials: MaterialLine[];
+  materialsAmountRub: number;
+  totalRub: number;
+  note?: string;
+};
+
 export type EstimateResult = {
-  lines: EstimateLine[];
-  coefficients: EstimateCoefficients;
-  coefficientProduct: number;
-  coefficientBreakdown: Record<string, { k: number; label: string }>;
-  worksSubtotalRub: number;
-  discountPercent: number;
-  discountRub: number;
+  lines: WorkLine[];
+  materialsAmountRub: number;
+  laborAmountRub: number;
   netRub: number;
   vatMode: VatMode;
   vatRate: number;
   vatRub: number;
   totalRub: number;
-  minimumOrderRub: number;
-  belowMinimum: boolean;
-  assumptions: string[];
+  overheadRate: number;
 };
 
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+export function roundMoney(value: number): number {
+  return Math.round(value * 100 + 1e-8) / 100;
 }
 
-export function coefficientProduct(c: EstimateCoefficients): number {
-  return (
-    HEIGHT_COEFFICIENT[c.heightBand].k *
-    WATER_COEFFICIENT[c.water].k *
-    ACCESS_COEFFICIENT[c.access].k *
-    SEASON_COEFFICIENT[c.season].k *
-    URGENCY_COEFFICIENT[c.urgency].k
-  );
+/** Multiply two 2-decimal money/qty values without binary drift. */
+export function moneyMul(a: number, b: number): number {
+  const aCents = Math.round(a * 100 + 1e-8);
+  const bCents = Math.round(b * 100 + 1e-8);
+  return Math.round((aCents * bCents) / 100) / 100;
 }
 
 export function calculateEstimate(input: {
-  items: EstimateLineInput[];
-  coefficients: EstimateCoefficients;
+  items: WorkLineInput[];
   vatMode?: VatMode;
-  discountPercent?: number;
 }): EstimateResult {
   if (input.items.length === 0) {
-    throw new Error("Нужна хотя бы одна позиция с количеством.");
+    throw new Error("Нужна хотя бы одна позиция работ с количеством.");
   }
 
-  const vatMode = input.vatMode ?? "added";
-  if (!VAT_MODES.includes(vatMode)) {
-    throw new Error(`Неизвестный режим НДС: ${String(input.vatMode)}`);
-  }
-
-  const discountPercent = input.discountPercent ?? 0;
-  if (discountPercent < 0 || discountPercent > 25) {
-    throw new Error("Скидка допустима в диапазоне 0–25%.");
-  }
-
-  const product = coefficientProduct(input.coefficients);
-  const lines: EstimateLine[] = [];
-
-  for (const item of input.items) {
+  const vatMode: VatMode = input.vatMode ?? "added";
+  const lines: WorkLine[] = input.items.map((item) => {
     if (!Number.isFinite(item.quantity) || item.quantity <= 0) {
-      throw new Error(
-        `Количество для «${item.serviceCode}» должно быть больше нуля.`,
+      throw new Error(`Количество для «${item.workCode}» должно быть больше нуля.`);
+    }
+    const work = getWork(item.workCode);
+    const overheadUnitRub = roundMoney(work.laborUnitRub * LABOR_OVERHEAD_RATE);
+    const laborUnitWithOverheadRub = roundMoney(work.laborUnitRub + overheadUnitRub);
+    const laborAmountRub = moneyMul(item.quantity, laborUnitWithOverheadRub);
+
+    const materials: MaterialLine[] = work.materials.map((norm) => {
+      const material = getMaterial(norm.materialCode);
+      const quantity = roundMoney(
+        item.quantity * norm.perWorkUnit * (1 + norm.wasteRate),
       );
-    }
-    const catalog = getCatalogItem(item.serviceCode);
-    const unitPrice =
-      item.unitPriceOverrideRub !== undefined
-        ? item.unitPriceOverrideRub
-        : catalog.unitPriceRub;
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) {
-      throw new Error(`Некорректная цена для «${item.serviceCode}».`);
-    }
-    const k = catalog.applyCoefficients ? product : 1;
-    const amountRub = roundMoney(item.quantity * unitPrice * k);
-    lines.push({
-      serviceCode: catalog.code,
-      name: catalog.name,
-      unit: catalog.unit,
-      quantity: item.quantity,
-      unitPriceRub: unitPrice,
-      coefficientsApplied: roundMoney(k),
-      amountRub,
-      note: item.note,
+      return {
+        materialCode: material.code,
+        name: material.name,
+        unit: material.unit,
+        quantity,
+        unitPriceRub: material.unitPriceRub,
+        amountRub: moneyMul(quantity, material.unitPriceRub),
+        note: norm.note,
+      };
     });
-  }
 
-  const worksSubtotalRub = roundMoney(
-    lines.reduce((sum, line) => sum + line.amountRub, 0),
+    const materialsAmountRub = roundMoney(
+      materials.reduce((sum, line) => sum + line.amountRub, 0),
+    );
+
+    return {
+      workCode: work.code,
+      name: work.name,
+      unit: work.unit,
+      quantity: item.quantity,
+      laborUnitRub: work.laborUnitRub,
+      overheadUnitRub,
+      laborUnitWithOverheadRub,
+      laborAmountRub,
+      materials,
+      materialsAmountRub,
+      totalRub: roundMoney(laborAmountRub + materialsAmountRub),
+      note: item.note,
+    };
+  });
+
+  const materialsAmountRub = roundMoney(
+    lines.reduce((sum, line) => sum + line.materialsAmountRub, 0),
   );
-  const discountRub = roundMoney((worksSubtotalRub * discountPercent) / 100);
-  const netRub = roundMoney(worksSubtotalRub - discountRub);
-
-  let vatRub = 0;
-  let totalRub = netRub;
-  if (vatMode === "added") {
-    vatRub = roundMoney(netRub * VAT_RATE);
-    totalRub = roundMoney(netRub + vatRub);
-  } else if (vatMode === "included") {
-    vatRub = roundMoney((netRub * VAT_RATE) / (1 + VAT_RATE));
-    totalRub = netRub;
-  }
-
-  const assumptions = [
-    "Расценка ориентировочная: финальная смета после выезда инженера и обмера.",
-    "В стоимость входят материалы, пакеры, оборудование и работа бригады, если не указано иное.",
-    "Гарантия до 10 лет — при выполнении полного цикла по регламенту Panda Core.",
-    "Минимальная стоимость выезда бригады — 80 000 ₽ без учёта мобилизации.",
-  ];
+  const laborAmountRub = roundMoney(
+    lines.reduce((sum, line) => sum + line.laborAmountRub, 0),
+  );
+  const netRub = roundMoney(materialsAmountRub + laborAmountRub);
+  const vatRub = vatMode === "added" ? roundMoney(netRub * VAT_RATE) : 0;
+  const totalRub = roundMoney(netRub + vatRub);
 
   return {
     lines,
-    coefficients: input.coefficients,
-    coefficientProduct: roundMoney(product),
-    coefficientBreakdown: {
-      height: HEIGHT_COEFFICIENT[input.coefficients.heightBand],
-      water: WATER_COEFFICIENT[input.coefficients.water],
-      access: ACCESS_COEFFICIENT[input.coefficients.access],
-      season: SEASON_COEFFICIENT[input.coefficients.season],
-      urgency: URGENCY_COEFFICIENT[input.coefficients.urgency],
-    },
-    worksSubtotalRub,
-    discountPercent,
-    discountRub,
+    materialsAmountRub,
+    laborAmountRub,
     netRub,
     vatMode,
     vatRate: VAT_RATE,
     vatRub,
     totalRub,
-    minimumOrderRub: MINIMUM_ORDER_RUB,
-    belowMinimum: totalRub > 0 && totalRub < MINIMUM_ORDER_RUB,
-    assumptions,
+    overheadRate: LABOR_OVERHEAD_RATE,
   };
+}
+
+/** Typical CFRP wall-strengthening package from the SDT template. */
+export function standardCfrpPackage(input: {
+  wallAreaM2: number;
+  lamellaM: number;
+  tapeM2: number;
+}): WorkLineInput[] {
+  return [
+    { workCode: "surface_prep", quantity: input.wallAreaM2 },
+    { workCode: "surface_repair", quantity: input.wallAreaM2 },
+    { workCode: "lamella_install", quantity: input.lamellaM },
+    { workCode: "tape_install", quantity: input.tapeM2 },
+    { workCode: "fire_protection", quantity: input.wallAreaM2 },
+  ];
 }

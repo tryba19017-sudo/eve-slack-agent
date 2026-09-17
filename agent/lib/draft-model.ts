@@ -1,54 +1,42 @@
-import type {
-  AccessLevel,
-  HeightBand,
-  ObjectType,
-  Season,
-  Urgency,
-  VatMode,
-  WaterCondition,
-} from "./catalog";
-import { DEFAULT_VALIDITY_DAYS } from "./company";
+import type { WorkCode } from "./catalog";
+import {
+  DEFAULT_PAYMENT_TERMS,
+  DEFAULT_VALIDITY_MONTHS,
+} from "./company";
 import type { EstimateResult } from "./estimate";
+import type { StripPiece } from "./takeoff";
 
 export type DraftWorkItem = {
-  serviceCode: string;
+  workCode: WorkCode | string;
   quantity?: number;
   note?: string;
-  unitPriceOverrideRub?: number;
 };
 
 export type ProposalDraft = {
   client: {
     company?: string;
     contactName?: string;
-    role?: string;
-    phone?: string;
-    email?: string;
-    inn?: string;
+    outgoingRef?: string;
   };
   object: {
+    name?: string;
     address?: string;
-    type?: ObjectType;
-    construction?: string;
-    yearBuilt?: string;
-    description?: string;
+    constructions?: string;
+  };
+  takeoff: {
+    wallAreaM2?: number;
+    lamellaM?: number;
+    tapeM2?: number;
+    lamellas?: StripPiece[];
+    tapes?: StripPiece[];
   };
   works: DraftWorkItem[];
-  conditions: {
-    heightBand?: HeightBand;
-    water?: WaterCondition;
-    access?: AccessLevel;
-    season?: Season;
-    urgency?: Urgency;
-    canStopOperation?: boolean;
-    deadline?: string;
-    distanceKm?: number;
-  };
   commercial: {
-    vatMode?: VatMode;
+    vatMode?: "none" | "added";
     paymentTerms?: string;
-    validityDays?: number;
-    discountPercent?: number;
+    validityMonths?: number;
+    designWeeks?: number;
+    workWeeks?: number;
   };
   notes?: string;
   lastEstimate?: EstimateResult;
@@ -57,13 +45,14 @@ export type ProposalDraft = {
 export const emptyDraft = (): ProposalDraft => ({
   client: {},
   object: {},
+  takeoff: {},
   works: [],
-  conditions: {},
   commercial: {
     vatMode: "added",
-    paymentTerms: "50% аванс, 50% по акту выполненных работ",
-    validityDays: DEFAULT_VALIDITY_DAYS,
-    discountPercent: 0,
+    paymentTerms: DEFAULT_PAYMENT_TERMS,
+    validityMonths: DEFAULT_VALIDITY_MONTHS,
+    designWeeks: 4,
+    workWeeks: 4,
   },
 });
 
@@ -78,74 +67,38 @@ export function listMissingFields(draft: ProposalDraft): MissingField[] {
   if (!draft.client.company && !draft.client.contactName) {
     missing.push({
       path: "client.company",
-      question: "Как называется компания-заказчик или как зовут контактное лицо?",
+      question: "Кто заказчик (организация)?",
       required: true,
     });
   }
-  if (!draft.object.address && !draft.object.description) {
+  if (!draft.object.name && !draft.object.constructions) {
     missing.push({
-      path: "object.address",
-      question: "Где объект: адрес или хотя бы район и тип здания?",
+      path: "object.name",
+      question:
+        "Что усиливаем? Например: стены С4 и С5 в уровне +1-го этажа.",
       required: true,
     });
   }
-  if (!draft.object.type) {
-    missing.push({
-      path: "object.type",
-      question:
-        "Какой тип объекта: ЖК, бизнес-центр, паркинг, промка, мост, подземка?",
-      required: false,
-    });
-  }
-  if (!draft.object.construction) {
-    missing.push({
-      path: "object.construction",
-      question:
-        "Что ремонтируем: стена, плита, шов, фундамент, колонна, стилобат?",
-      required: false,
-    });
-  }
-  const hasQuantity = draft.works.some(
-    (work) =>
-      work.serviceCode !== "survey" &&
-      work.serviceCode !== "mobilization" &&
-      typeof work.quantity === "number" &&
-      work.quantity > 0,
+  const hasWorks = draft.works.some(
+    (work) => typeof work.quantity === "number" && work.quantity > 0,
   );
-  if (draft.works.length === 0 || !hasQuantity) {
+  const hasTakeoff =
+    (draft.takeoff.wallAreaM2 ?? 0) > 0 ||
+    (draft.takeoff.lamellaM ?? 0) > 0 ||
+    (draft.takeoff.tapeM2 ?? 0) > 0;
+  if (!hasWorks && !hasTakeoff) {
     missing.push({
-      path: "works",
+      path: "takeoff",
       question:
-        "Какой объём работ? Для трещин — погонные метры, для гидроизоляции — м², для датчиков — штуки.",
+        "Какие объёмы: площадь усиления (м²), погонаж ламелей (м) и площадь холста/хомутов (м²)? Можно таблицей с L, b и количеством.",
       required: true,
     });
   }
-  if (!draft.conditions.water) {
+  if (draft.takeoff.wallAreaM2 === undefined && !hasWorks) {
     missing.push({
-      path: "conditions.water",
-      question: "Есть ли вода в трещине: сухо, влажно или активная течь?",
-      required: false,
-    });
-  }
-  if (!draft.conditions.heightBand) {
-    missing.push({
-      path: "conditions.heightBand",
-      question: "На какой высоте работы: до 5 м, 5–15, 15–30 или выше 30 м?",
-      required: false,
-    });
-  }
-  if (!draft.conditions.access) {
-    missing.push({
-      path: "conditions.access",
+      path: "takeoff.wallAreaM2",
       question:
-        "Какой доступ: свободный, ограниченный без остановки объекта, или тесное пространство / ночное окно?",
-      required: false,
-    });
-  }
-  if (!draft.conditions.deadline) {
-    missing.push({
-      path: "conditions.deadline",
-      question: "К какому сроку нужно выполнить работы?",
+        "Площадь подготовки/ремонта/огнезащиты, м² (в образце — 21,50 м² стен С4 и С5).",
       required: false,
     });
   }
@@ -171,9 +124,9 @@ export function mergeDraft(
   patch: {
     client?: ProposalDraft["client"];
     object?: ProposalDraft["object"];
+    takeoff?: ProposalDraft["takeoff"];
     works?: DraftWorkItem[];
     replaceWorks?: boolean;
-    conditions?: ProposalDraft["conditions"];
     commercial?: ProposalDraft["commercial"];
     notes?: string;
     lastEstimate?: EstimateResult;
@@ -189,8 +142,8 @@ export function mergeDraft(
   return {
     client: mergeDefined(current.client, patch.client),
     object: mergeDefined(current.object, patch.object),
+    takeoff: mergeDefined(current.takeoff, patch.takeoff),
     works,
-    conditions: mergeDefined(current.conditions, patch.conditions),
     commercial: mergeDefined(current.commercial, patch.commercial),
     notes: patch.notes ?? current.notes,
     lastEstimate: patch.lastEstimate ?? current.lastEstimate,
@@ -201,10 +154,10 @@ function mergeWorks(
   current: DraftWorkItem[],
   incoming: DraftWorkItem[],
 ): DraftWorkItem[] {
-  const byCode = new Map(current.map((item) => [item.serviceCode, { ...item }]));
+  const byCode = new Map(current.map((item) => [item.workCode, { ...item }]));
   for (const item of incoming) {
-    const existing = byCode.get(item.serviceCode);
-    byCode.set(item.serviceCode, existing ? { ...existing, ...item } : item);
+    const existing = byCode.get(item.workCode);
+    byCode.set(item.workCode, existing ? { ...existing, ...item } : item);
   }
   return [...byCode.values()];
 }

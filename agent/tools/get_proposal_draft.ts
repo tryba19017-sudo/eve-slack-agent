@@ -4,7 +4,7 @@ import { listMissingFields, proposalDraft } from "../lib/draft";
 
 export default defineTool({
   description:
-    "Read the current commercial-proposal draft and the list of missing fields. Use before asking the user follow-up questions.",
+    "Read the current SDT commercial-proposal draft and missing fields. Use before asking follow-up questions.",
   inputSchema: z.object({}),
   async execute() {
     const draft = proposalDraft.get();

@@ -1,6 +1,7 @@
-import { calculateEstimate } from "./estimate";
+import { calculateEstimate, standardCfrpPackage } from "./estimate";
 import { formatProposal } from "./proposal";
 import { emptyDraft, listMissingFields, mergeDraft } from "./draft-model";
+import { takeoffFromPieces } from "./takeoff";
 
 function assertEqual(actual: unknown, expected: unknown, label: string) {
   if (actual !== expected) {
@@ -8,89 +9,83 @@ function assertEqual(actual: unknown, expected: unknown, label: string) {
   }
 }
 
-function assert(condition: unknown, label: string) {
-  if (!condition) throw new Error(label);
+function assertClose(actual: number, expected: number, label: string, eps = 0.02) {
+  if (Math.abs(actual - expected) > eps) {
+    throw new Error(`${label}: expected ${expected}, got ${actual}`);
+  }
 }
 
-const dryParking = calculateEstimate({
-  items: [
-    { serviceCode: "survey", quantity: 1 },
-    { serviceCode: "crack_prep", quantity: 40 },
-    { serviceCode: "polymer_injection_pu", quantity: 40 },
+const sdtSample = calculateEstimate({
+  items: standardCfrpPackage({
+    wallAreaM2: 21.5,
+    lamellaM: 86.77,
+    tapeM2: 6.99,
+  }),
+});
+
+assertEqual(sdtSample.lines[0]?.laborAmountRub, 73564.4, "prep labor");
+assertEqual(sdtSample.lines[1]?.laborAmountRub, 146581.2, "repair labor");
+assertClose(sdtSample.lines[2]?.laborAmountRub ?? 0, 221902.99, "lamella labor");
+assertClose(sdtSample.lines[3]?.laborAmountRub ?? 0, 17876.02, "tape labor");
+assertEqual(sdtSample.lines[4]?.laborAmountRub, 62887.5, "fire labor");
+
+const repairMats = sdtSample.lines[1]?.materials ?? [];
+assertEqual(repairMats[0]?.quantity, 43, "mapegrout 2 kg/m2");
+assertEqual(repairMats[0]?.amountRub, 2748.99, "mapegrout amount");
+assertEqual(repairMats[1]?.quantity, 21.5, "manopox 1 kg/m2");
+assertEqual(repairMats[1]?.amountRub, 24196.32, "manopox amount");
+
+const lamellaMats = sdtSample.lines[2]?.materials ?? [];
+assertEqual(lamellaMats[0]?.quantity, 95.45, "lamella +10%");
+assertEqual(lamellaMats[1]?.quantity, 143.17, "laminate resin 1.65 kg/m");
+assertClose(lamellaMats[1]?.amountRub ?? 0, 412365.39, "laminate resin amount");
+
+const fireMats = sdtSample.lines[4]?.materials ?? [];
+assertEqual(fireMats[0]?.quantity, 53.75, "iceberg 2.5 kg/m2");
+assertEqual(fireMats[0]?.amountRub, 45819.73, "iceberg amount");
+
+assertEqual(sdtSample.vatRate, 0.22, "VAT 22%");
+assertClose(sdtSample.vatRub, sdtSample.netRub * 0.22, "VAT amount");
+assertClose(sdtSample.totalRub, sdtSample.netRub + sdtSample.vatRub, "gross");
+
+const bom = takeoffFromPieces({
+  lamellas: [
+    { lengthMm: 4005, widthMm: 150, quantity: 10 },
+    { lengthMm: 5000, widthMm: 150, quantity: 2 },
+    { lengthMm: 4750, widthMm: 150, quantity: 2 },
+    { lengthMm: 4750, widthMm: 150, quantity: 2 },
+    { lengthMm: 2215, widthMm: 150, quantity: 8 },
   ],
-  coefficients: {
-    heightBand: "0-5",
-    water: "dry",
-    access: "easy",
-    season: "above_5c",
-    urgency: "normal",
-  },
-  vatMode: "added",
+  tapes: [
+    { lengthMm: 4850, widthMm: 200, quantity: 5 },
+    { lengthMm: 2935, widthMm: 200, quantity: 1 },
+  ],
 });
-
-assertEqual(dryParking.lines[0]?.amountRub, 0, "survey is free");
-assertEqual(dryParking.lines[1]?.amountRub, 40 * 850, "prep without coefficients");
-assertEqual(dryParking.lines[2]?.amountRub, 40 * 4900, "PU injection");
-assertEqual(dryParking.netRub, 40 * 850 + 40 * 4900, "net");
-assertEqual(dryParking.vatRub, Math.round(dryParking.netRub * 0.22 * 100) / 100, "VAT 22%");
-assertEqual(dryParking.belowMinimum, false, "40 m is above minimum");
-
-const leakHigh = calculateEstimate({
-  items: [{ serviceCode: "polymer_injection_pu", quantity: 10 }],
-  coefficients: {
-    heightBand: "15-30",
-    water: "active_leak",
-    access: "restricted",
-    season: "winter",
-    urgency: "emergency",
-  },
-  vatMode: "none",
-  discountPercent: 10,
-});
-
-const expectedK = 1.3 * 1.35 * 1.18 * 1.15 * 1.5;
-assertEqual(leakHigh.coefficientProduct, Math.round(expectedK * 100) / 100, "k product");
-assertEqual(
-  leakHigh.lines[0]?.amountRub,
-  Math.round(10 * 4900 * expectedK * 100) / 100,
-  "leaky high-rise amount",
-);
-assert(leakHigh.discountRub > 0, "discount applied");
-assertEqual(leakHigh.vatRub, 0, "no VAT");
-
-const tiny = calculateEstimate({
-  items: [{ serviceCode: "crack_monitoring", quantity: 1 }],
-  coefficients: {
-    heightBand: "0-5",
-    water: "dry",
-    access: "easy",
-    season: "above_5c",
-    urgency: "normal",
-  },
-});
-assert(tiny.belowMinimum, "single sensor is below minimum");
-assertEqual(tiny.lines[0]?.coefficientsApplied, 1, "monitoring ignores coefficients");
+assertClose(bom.lamellaM, 86.77, "sketch lamella sum");
+assertClose(bom.tapeLengthM, 27.185, "sketch tape length");
+assertClose(bom.tapeM2FromStrips, 5.437, "tape L×b, one layer");
 
 const draft = mergeDraft(emptyDraft(), {
-  client: { company: "ООО Тест" },
-  object: { address: "Москва, тестовый паркинг", type: "parking" },
-  works: [{ serviceCode: "polymer_injection_pu", quantity: 12 }],
+  client: { company: "МБ-Проект Бюро" },
+  object: { name: "Усиление стен С4 и С5 в уровне +1-го этажа" },
+  takeoff: { wallAreaM2: 21.5, lamellaM: 86.77, tapeM2: 6.99 },
 });
 assertEqual(listMissingFields(draft).filter((f) => f.required).length, 0, "required filled");
 
-const surveyOnly = mergeDraft(emptyDraft(), {
-  client: { company: "ООО Тест" },
-  object: { address: "Москва" },
-  works: [{ serviceCode: "survey", quantity: 1 }],
+const formatted = formatProposal({
+  draft,
+  estimate: sdtSample,
+  outgoingRef: "01-09/1",
+  issuedAt: "01.09.2026",
 });
-assert(
-  surveyOnly.works.length === 1 &&
-    listMissingFields(surveyOnly).some((f) => f.path === "works" && f.required),
-  "survey alone is not a measured scope",
+if (!formatted.markdown.includes("МБ-Проект Бюро")) {
+  throw new Error("client missing from КП");
+}
+if (!formatted.markdown.includes("НДС 22%")) {
+  throw new Error("VAT line missing");
+}
+
+console.log(
+  `SDT sample: net ${sdtSample.netRub} VAT ${sdtSample.vatRub} total ${sdtSample.totalRub}`,
 );
-
-const formatted = formatProposal({ draft, estimate: dryParking, proposalNumber: "КП-TEST" });
-assert(formatted.markdown.includes("КП-TEST"), "proposal number in markdown");
-assert(formatted.markdown.includes("Итого к оплате"), "total line");
-
 console.log("estimate checks passed");

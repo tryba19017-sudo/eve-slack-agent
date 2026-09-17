@@ -10,7 +10,4 @@ export {
   type ProposalDraft,
 } from "./draft-model";
 
-export const proposalDraft = defineState(
-  "panda-core.proposal-draft",
-  emptyDraft,
-);
+export const proposalDraft = defineState("sdt.proposal-draft", emptyDraft);
