@@ -9,11 +9,13 @@
   "scripts": {
     "build": "eve build",
     "dev": "eve dev",
+    "dev:ui": "SPAWN_EVE=1 node scripts/dev-proxy.mjs",
     "start": "eve start",
     "typecheck": "tsc",
     "test": "tsx agent/lib/estimate.check.ts"
   },
   "dependencies": {
+    "@ai-sdk/xai": "4.0.40",
     "@vercel/connect": "0.8.0",
     "ai": "7.0.70",
     "eve": "^0.39.3",
@@ -23,5 +25,8 @@
     "@types/node": "^25.9.3",
     "tsx": "^4.23.13",
     "typescript": "7.0.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
   }
 }

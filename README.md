@@ -17,11 +17,24 @@ The calculator follows a live sheet (customer «МБ-Проект Бюро», wa
 
 ## Getting Started
 
+The chat agent talks to **xAI Grok** (`grok-4.6`) with `XAI_API_KEY`. A Vercel AI Gateway key is not required.
+
+1. Create `.env.local` (gitignored):
+
 ```bash
-vercel link
-vercel env pull
-pnpm dev
+XAI_API_KEY=xai-...
 ```
+
+Get the key at [console.x.ai](https://console.x.ai). Then:
+
+```bash
+pnpm install
+pnpm dev:ui
+```
+
+Open `http://127.0.0.1:8080/agent`. If the key is missing, paste it on that page — it is stored only in `.env.local` on the machine that runs the agent.
+
+`localhost` on a cloud VM is not reachable from your laptop. Use the public URL from the running session, or run `pnpm dev:ui` on your computer.
 
 Checks:
 

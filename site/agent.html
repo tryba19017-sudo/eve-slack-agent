@@ -13,22 +13,32 @@
   header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;}
   header a{color:var(--accent);text-decoration:none;font-size:.9rem;}
   h1{margin:0;font-size:1.05rem;font-weight:700;}
+  #keybar{display:none;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:#1f1a12;}
+  #keybar.visible{display:flex;}
+  #keybar p{margin:0;color:var(--muted);font-size:.85rem;flex:1 1 220px;}
+  #keybar input{flex:1 1 220px;min-width:180px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--fg);padding:8px 10px;font:inherit;}
+  #keybar button{background:var(--accent);color:var(--on);border:0;border-radius:999px;padding:8px 14px;font-family:"IBM Plex Mono",monospace;font-weight:600;cursor:pointer;}
   #log{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
   .msg{max-width:72ch;padding:12px 14px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:.95rem;}
   .user{align-self:flex-end;background:var(--accent);color:var(--on);}
   .bot{align-self:flex-start;background:var(--raised);border:1px solid var(--line);}
   .sys{align-self:center;color:var(--muted);font-size:.82rem;}
-  form{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--line);}
+  form#f{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--line);}
   textarea{flex:1;resize:none;min-height:52px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--fg);padding:10px 12px;font:inherit;}
-  button{background:var(--accent);color:var(--on);border:0;border-radius:999px;padding:0 18px;font-family:"IBM Plex Mono",monospace;font-weight:600;cursor:pointer;}
+  #go{background:var(--accent);color:var(--on);border:0;border-radius:999px;padding:0 18px;font-family:"IBM Plex Mono",monospace;font-weight:600;cursor:pointer;}
   button:disabled{opacity:.5;cursor:not-allowed;}
 </style>
 </head>
 <body>
 <header>
-  <h1>Агент КП · Группа компаний SDT</h1>
+  <h1>Агент КП · Группа компаний SDT · Grok</h1>
   <a href="/">На сайт</a>
 </header>
+<div id="keybar">
+  <p>Ключ xAI / Grok подойдёт. Вставьте <code>XAI_API_KEY</code> с <a href="https://console.x.ai" target="_blank" rel="noopener">console.x.ai</a> — localhost с облачной машины у вас не откроется, эта страница должна.</p>
+  <input id="key" type="password" autocomplete="off" placeholder="xai-..." />
+  <button type="button" id="savekey">Сохранить ключ</button>
+</div>
 <div id="log">
   <div class="msg sys">Напишите объект: заказчик, стены, площадь м², ламель м, холст м² — или вставьте ведомость заготовок.</div>
 </div>
@@ -42,8 +52,12 @@
   var form = document.getElementById("f");
   var input = document.getElementById("t");
   var go = document.getElementById("go");
+  var keybar = document.getElementById("keybar");
+  var keyInput = document.getElementById("key");
+  var saveKey = document.getElementById("savekey");
   var sessionId = null;
   var abort = null;
+  var hasKey = false;
 
   function add(cls, text){
     var el = document.createElement("div");
@@ -54,12 +68,42 @@
     return el;
   }
 
+  function showKeyBar(show){
+    keybar.classList.toggle("visible", !!show);
+  }
+
+  async function refreshStatus(){
+    try {
+      var res = await fetch("/api/status");
+      var st = await res.json();
+      hasKey = !!st.hasXaiKey;
+      showKeyBar(!hasKey);
+      if (!st.eveReady) add("sys", "Агент ещё запускается…");
+    } catch (e) {
+      showKeyBar(true);
+    }
+  }
+
   function extractText(ev){
     var d = ev.data || {};
     if (typeof d.text === "string") return d.text;
     if (typeof d.message === "string" && ev.type !== "turn.failed" && ev.type !== "step.failed" && ev.type !== "session.failed") return d.message;
     if (d.parts && d.parts[0] && d.parts[0].text) return d.parts[0].text;
     return "";
+  }
+
+  function mapModelError(err){
+    var s = String(err || "");
+    if (/credentials|Gateway|AI_GATEWAY/i.test(s)) {
+      return "Нет ключа модели. Нужен XAI_API_KEY (Grok / xAI), не ключ Vercel Gateway.";
+    }
+    if (/incorrect api key|invalid api key|unauthorized|401|403/i.test(s)) {
+      return "Ключ Grok отклонён. Проверьте XAI_API_KEY на console.x.ai и вставьте его ещё раз.";
+    }
+    if (/XAI_API_KEY|xai/i.test(s) && /missing|not set|required/i.test(s)) {
+      return "Вставьте ключ Grok (XAI_API_KEY) в полосу сверху.";
+    }
+    return s || "Ошибка модели";
   }
 
   async function readStream(session, botEl){
@@ -90,14 +134,41 @@
           if (done) { text = done; botEl.textContent = done; }
         } else if (ev.type === "turn.failed" || ev.type === "step.failed" || ev.type === "session.failed"){
           var err = (ev.data && (ev.data.message || (ev.data.details && ev.data.details.message))) || "Ошибка модели";
-          if (String(err).indexOf("credentials") !== -1 || String(err).indexOf("Gateway") !== -1){
-            err = "Агент запущен, но нет ключа модели. Нужен AI_GATEWAY_API_KEY (Vercel AI Gateway) или ключ Anthropic.";
-          }
+          err = mapModelError(err);
+          if (/ключа|Grok|XAI/i.test(err)) showKeyBar(true);
           botEl.textContent = err;
         }
       }
     }
   }
+
+  saveKey.addEventListener("click", async function(){
+    var apiKey = keyInput.value.trim();
+    if (!apiKey) return;
+    saveKey.disabled = true;
+    saveKey.textContent = "Сохраняю…";
+    try {
+      var res = await fetch("/api/xai-key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey })
+      });
+      var body = await res.json();
+      if (!res.ok || !body.ok){
+        add("sys", body.error || "Не удалось сохранить ключ");
+        return;
+      }
+      keyInput.value = "";
+      hasKey = true;
+      showKeyBar(false);
+      add("sys", "Ключ Grok сохранён. Можно писать агенту.");
+    } catch (err) {
+      add("sys", String(err && err.message ? err.message : err));
+    } finally {
+      saveKey.disabled = false;
+      saveKey.textContent = "Сохранить ключ";
+    }
+  });
 
   form.addEventListener("submit", async function(e){
     e.preventDefault();
@@ -116,7 +187,7 @@
       });
       var body = await res.json();
       if (!res.ok && !body.ok){
-        botEl.textContent = body.error || body.message || ("HTTP " + res.status);
+        botEl.textContent = mapModelError(body.error || body.message || ("HTTP " + res.status));
         return;
       }
       sessionId = body.sessionId || sessionId;
@@ -132,6 +203,8 @@
       input.focus();
     }
   });
+
+  refreshStatus();
 })();
 </script>
 </body>
