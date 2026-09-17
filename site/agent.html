@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Агент КП SDT</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#131319;--raised:#1b1c24;--fg:#f1ede1;--muted:#a49d8c;--line:#2c2d37;--accent:#e2ac47;--on:#171106;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--fg);font-family:"IBM Plex Sans",system-ui,sans-serif;height:100svh;display:flex;flex-direction:column;}
+  header{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px;}
+  header a{color:var(--accent);text-decoration:none;font-size:.9rem;}
+  h1{margin:0;font-size:1.05rem;font-weight:700;}
+  #keybar{display:none;gap:10px;align-items:center;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid var(--line);background:#1f1a12;}
+  #keybar.visible{display:flex;}
+  #keybar p{margin:0;color:var(--muted);font-size:.85rem;flex:1 1 220px;}
+  #keybar input{flex:1 1 220px;min-width:180px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--fg);padding:8px 10px;font:inherit;}
+  #keybar button{background:var(--accent);color:var(--on);border:0;border-radius:999px;padding:8px 14px;font-family:"IBM Plex Mono",monospace;font-weight:600;cursor:pointer;}
+  #log{flex:1;overflow:auto;padding:20px;display:flex;flex-direction:column;gap:14px;}
+  .msg{max-width:72ch;padding:12px 14px;border-radius:12px;white-space:pre-wrap;line-height:1.45;font-size:.95rem;}
+  .user{align-self:flex-end;background:var(--accent);color:var(--on);}
+  .bot{align-self:flex-start;background:var(--raised);border:1px solid var(--line);}
+  .sys{align-self:center;color:var(--muted);font-size:.82rem;}
+  form#f{display:flex;gap:10px;padding:14px 16px;border-top:1px solid var(--line);}
+  textarea{flex:1;resize:none;min-height:52px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--fg);padding:10px 12px;font:inherit;}
+  #go{background:var(--accent);color:var(--on);border:0;border-radius:999px;padding:0 18px;font-family:"IBM Plex Mono",monospace;font-weight:600;cursor:pointer;}
+  button:disabled{opacity:.5;cursor:not-allowed;}
+</style>
+</head>
+<body>
+<header>
+  <h1>Агент КП · Группа компаний SDT · Grok</h1>
+  <a href="/">На сайт</a>
+</header>
+<div id="keybar">
+  <p>Ключ xAI / Grok подойдёт. Вставьте <code>XAI_API_KEY</code> с <a href="https://console.x.ai" target="_blank" rel="noopener">console.x.ai</a> — localhost с облачной машины у вас не откроется, эта страница должна.</p>
+  <input id="key" type="password" autocomplete="off" placeholder="xai-..." />
+  <button type="button" id="savekey">Сохранить ключ</button>
+</div>
+<div id="log">
+  <div class="msg sys">Напишите объект: заказчик, стены, площадь м², ламель м, холст м² — или вставьте ведомость заготовок.</div>
+</div>
+<form id="f">
+  <textarea id="t" placeholder="МБ-Проект Бюро, стены С4 и С5, 21.5 м², ламель 86.77 м, холст 6.99 м²" required></textarea>
+  <button type="submit" id="go">Отправить</button>
+</form>
+<script>
+(function(){
+  var log = document.getElementById("log");
+  var form = document.getElementById("f");
+  var input = document.getElementById("t");
+  var go = document.getElementById("go");
+  var keybar = document.getElementById("keybar");
+  var keyInput = document.getElementById("key");
+  var saveKey = document.getElementById("savekey");
+  var sessionId = null;
+  var abort = null;
+  var hasKey = false;
+
+  function add(cls, text){
+    var el = document.createElement("div");
+    el.className = "msg " + cls;
+    el.textContent = text;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  }
+
+  function showKeyBar(show){
+    keybar.classList.toggle("visible", !!show);
+  }
+
+  async function refreshStatus(){
+    try {
+      var res = await fetch("/api/status");
+      var st = await res.json();
+      hasKey = !!st.hasXaiKey;
+      showKeyBar(!hasKey);
+      if (!st.eveReady) add("sys", "Агент ещё запускается…");
+    } catch (e) {
+      showKeyBar(true);
+    }
+  }
+
+  function extractText(ev){
+    var d = ev.data || {};
+    if (typeof d.text === "string") return d.text;
+    if (typeof d.message === "string" && ev.type !== "turn.failed" && ev.type !== "step.failed" && ev.type !== "session.failed") return d.message;
+    if (d.parts && d.parts[0] && d.parts[0].text) return d.parts[0].text;
+    return "";
+  }
+
+  function mapModelError(err){
+    var s = String(err || "");
+    if (/credentials|Gateway|AI_GATEWAY|API key missing|could not load an API key|model-provider-api-key-missing/i.test(s)) {
+      return "Нет ключа модели. Нужен XAI_API_KEY (Grok / xAI), не ключ Vercel Gateway.";
+    }
+    if (/incorrect api key|invalid api key|unauthorized|401|403/i.test(s)) {
+      return "Ключ Grok отклонён. Проверьте XAI_API_KEY на console.x.ai и вставьте его ещё раз.";
+    }
+    if (/XAI_API_KEY|xai/i.test(s) && /missing|not set|required/i.test(s)) {
+      return "Вставьте ключ Grok (XAI_API_KEY) в полосу сверху.";
+    }
+    return s || "Ошибка модели";
+  }
+
+  async function readStream(session, botEl){
+    if (abort) abort.abort();
+    abort = new AbortController();
+    var res = await fetch("/eve/v1/session/" + session + "/stream", { signal: abort.signal });
+    var reader = res.body.getReader();
+    var dec = new TextDecoder();
+    var buf = "";
+    var text = "";
+    while (true){
+      var chunk = await reader.read();
+      if (chunk.done) break;
+      buf += dec.decode(chunk.value, { stream: true });
+      var lines = buf.split("\n");
+      buf = lines.pop();
+      for (var i = 0; i < lines.length; i++){
+        var line = lines[i].trim();
+        if (!line) continue;
+        var ev;
+        try { ev = JSON.parse(line); } catch (e) { continue; }
+        if (ev.type === "message.appended"){
+          text = extractText(ev) || text + (ev.data && ev.data.delta ? ev.data.delta : "");
+          if (ev.data && ev.data.text) text = ev.data.text;
+          botEl.textContent = text || "…";
+        } else if (ev.type === "message.completed"){
+          var done = extractText(ev);
+          if (done) { text = done; botEl.textContent = done; }
+        } else if (ev.type === "turn.failed" || ev.type === "step.failed" || ev.type === "session.failed"){
+          var err = (ev.data && (ev.data.message || (ev.data.details && ev.data.details.message))) || "Ошибка модели";
+          err = mapModelError(err);
+          if (/ключа|Grok|XAI/i.test(err)) showKeyBar(true);
+          botEl.textContent = err;
+        }
+      }
+    }
+  }
+
+  saveKey.addEventListener("click", async function(){
+    var apiKey = keyInput.value.trim();
+    if (!apiKey) return;
+    saveKey.disabled = true;
+    saveKey.textContent = "Сохраняю…";
+    try {
+      var res = await fetch("/api/xai-key", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey })
+      });
+      var body = await res.json();
+      if (!res.ok || !body.ok){
+        add("sys", body.error || "Не удалось сохранить ключ");
+        return;
+      }
+      keyInput.value = "";
+      hasKey = true;
+      showKeyBar(false);
+      add("sys", "Ключ Grok сохранён. Можно писать агенту.");
+    } catch (err) {
+      add("sys", String(err && err.message ? err.message : err));
+    } finally {
+      saveKey.disabled = false;
+      saveKey.textContent = "Сохранить ключ";
+    }
+  });
+
+  form.addEventListener("submit", async function(e){
+    e.preventDefault();
+    var msg = input.value.trim();
+    if (!msg) return;
+    add("user", msg);
+    input.value = "";
+    go.disabled = true;
+    var botEl = add("bot", "Считаю…");
+    try {
+      var url = sessionId ? "/eve/v1/session/" + sessionId : "/eve/v1/session";
+      var res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ message: msg })
+      });
+      var body = await res.json();
+      if (!res.ok && !body.ok){
+        botEl.textContent = mapModelError(body.error || body.message || ("HTTP " + res.status));
+        return;
+      }
+      sessionId = body.sessionId || sessionId;
+      if (!sessionId){
+        botEl.textContent = "Нет sessionId: " + JSON.stringify(body);
+        return;
+      }
+      await readStream(sessionId, botEl);
+    } catch (err){
+      botEl.textContent = String(err && err.message ? err.message : err);
+    } finally {
+      go.disabled = false;
+      input.focus();
+    }
+  });
+
+  refreshStatus();
+})();
+</script>
+</body>
+</html>

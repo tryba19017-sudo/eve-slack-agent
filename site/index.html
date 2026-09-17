@@ -348,6 +348,33 @@
   @media (max-width:900px){ .obj-grid{grid-template-columns:1fr 1fr;} }
   @media (max-width:560px){ .obj-grid{grid-template-columns:1fr;} }
 
+  /* ============ KP ============ */
+  .kp-wrap{display:grid;grid-template-columns:1fr 1.15fr;gap:28px;align-items:start;}
+  .kp-need{background:var(--bg-raised);border:1px solid var(--line);border-radius:var(--radius);padding:28px;}
+  .kp-need h3{font-family:var(--font-body);font-weight:700;font-size:1.05rem;text-transform:none;letter-spacing:0;margin-bottom:14px;}
+  .kp-need ul{display:flex;flex-direction:column;gap:10px;}
+  .kp-need li{display:flex;gap:10px;align-items:flex-start;color:var(--fg-muted);font-size:.92rem;}
+  .kp-need li strong{color:var(--fg);font-weight:600;}
+  .kp-need svg{width:18px;height:18px;color:var(--accent);flex:none;margin-top:3px;}
+  .kp-form{background:var(--bg-raised);border:1px solid var(--line);border-radius:var(--radius);padding:28px;}
+  .kp-form .field label{color:var(--fg-muted);}
+  .kp-form .field input,.kp-form .field select{
+    background:var(--bg);border:1px solid var(--line);color:var(--fg);
+  }
+  .kp-form .field input:focus,.kp-form .field select:focus{border-color:var(--accent);outline:none;}
+  .kp-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+  .kp-preview{
+    margin-top:22px;padding:22px;border-radius:var(--radius);
+    border:1px dashed var(--line);background:var(--bg-sunken);
+    font-size:.92rem;white-space:pre-wrap;line-height:1.5;
+    font-family:var(--font-mono);color:var(--fg);
+    min-height:8rem;
+  }
+  .kp-preview.is-empty{color:var(--fg-muted);white-space:normal;}
+  .kp-total{margin-top:12px;font-family:var(--font-mono);font-size:1.15rem;color:var(--accent);}
+  .kp-form .btn{width:100%;margin-top:6px;}
+  @media (max-width:900px){ .kp-wrap,.kp-grid{grid-template-columns:1fr;} }
+
   /* ============ CTA / FORM ============ */
   .cta-wrap{display:grid;grid-template-columns:1.1fr 1fr;gap:56px;align-items:start;}
   .cta-text h2{font-size:clamp(2rem,4vw,2.8rem);}
@@ -407,6 +434,8 @@
       <a href="#process">Как мы работаем</a>
       <a href="#guarantees">Гарантии</a>
       <a href="#objects">Объекты</a>
+      <a href="#kp">КП</a>
+      <a href="/agent.html">Агент</a>
       <a href="#contacts">Контакты</a>
     </nav>
     <div class="nav-cta">
@@ -427,6 +456,8 @@
   <a href="#process">Процесс</a>
   <a href="#guarantees">Гарантии</a>
   <a href="#objects">Объекты</a>
+  <a href="#kp">КП</a>
+  <a href="/agent.html">Агент</a>
   <a href="#contacts">Контакты</a>
 </div>
 
@@ -489,7 +520,7 @@
       </h1>
       <p class="hero-sub">Инъекционная герметизация и восстановление несущих конструкций полимерными и цементными составами. Работаем на высотках, паркингах и промышленных объектах — с гарантией до 10 лет.</p>
       <div class="hero-actions">
-        <a href="#contacts" class="btn">Бесплатный расчёт</a>
+        <a href="#kp" class="btn">Бесплатный расчёт</a>
         <a href="#process" class="btn btn-ghost">Как мы работаем</a>
       </div>
       <div class="hero-stats">
@@ -727,6 +758,39 @@
     </div>
   </section>
 
+  <section class="section" id="kp" style="padding-top:0;">
+    <div class="container">
+      <div class="section-head reveal">
+        <span class="eyebrow">Коммерческое предложение</span>
+        <h2>Смета внешнего армирования</h2>
+        <p class="prose fg-muted">Форма повторяет рабочее КП SDT: работа отдельно от материалов, накладные 30%, НДС 22%. Живой диалог — в <a href="/agent.html">агенте</a>.</p>
+      </div>
+      <div class="kp-wrap">
+        <div class="kp-need reveal">
+          <h3>Что нужно для расчёта</h3>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Обязательно.</strong> Заказчик, что усиливаем, площадь стен (м²), погонаж ламелей (м), площадь холста (м²).</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>Из эскиза.</strong> Таблица заготовок L × b × шт. Ламель суммируется в метрах; холст в смете может не совпадать с L×b хомутов.</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none"><path d="M4 12l6 6L20 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg><span><strong>В примечаниях.</strong> Аванс 70%, плюсовые температуры, электричество 220/380 В, тепловой контур отдельно.</span></li>
+          </ul>
+          <p class="fg-muted" style="margin-top:18px;font-size:.9rem;">Пример: «МБ-Проект Бюро, стены С4 и С5, +1 этаж, площадь 21,5 м², ламель 86,77 м, холст 6,99 м²».</p>
+        </div>
+        <form class="kp-form reveal" id="kpForm">
+          <div class="kp-grid">
+            <div class="field"><label for="kp-company">Заказчик</label><input id="kp-company" name="company" type="text" placeholder="МБ-Проект Бюро" required></div>
+            <div class="field"><label for="kp-object">Объект</label><input id="kp-object" name="object" type="text" placeholder="Усиление стен С4 и С5, +1 этаж" required></div>
+            <div class="field"><label for="kp-area">Площадь усиления, м²</label><input id="kp-area" name="area" type="number" min="0.1" step="0.01" value="21.5" required></div>
+            <div class="field"><label for="kp-lamella">Ламель, м.п.</label><input id="kp-lamella" name="lamella" type="number" min="0.1" step="0.01" value="86.77" required></div>
+            <div class="field"><label for="kp-tape">Холст, м²</label><input id="kp-tape" name="tape" type="number" min="0.1" step="0.01" value="6.99" required></div>
+          </div>
+          <button type="submit" class="btn">Рассчитать предварительное КП</button>
+          <p class="kp-total" id="kpTotal" hidden></p>
+          <pre class="kp-preview is-empty" id="kpPreview">Заполните форму — здесь появится текст коммерческого предложения.</pre>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <section class="section band" id="contacts">
     <div class="container">
       <div class="cta-wrap">
@@ -780,7 +844,7 @@
       <div class="footer-nav">
         <div class="footer-col">
           <h4>Компания</h4>
-          <ul><li><a href="#services">Услуги</a></li><li><a href="#process">Как мы работаем</a></li><li><a href="#guarantees">Гарантии</a></li><li><a href="#objects">Объекты</a></li></ul>
+          <ul><li><a href="#services">Услуги</a></li><li><a href="#process">Как мы работаем</a></li><li><a href="#guarantees">Гарантии</a></li><li><a href="#objects">Объекты</a></li><li><a href="#kp">Коммерческое предложение</a></li></ul>
         </div>
         <div class="footer-col">
           <h4>Контакты</h4>
@@ -885,6 +949,100 @@
     form.reset();
     setTimeout(function(){ btn.textContent = original; }, 2600);
   });
+
+  // KP preview — rates must stay in sync with agent/lib/catalog.ts
+  var OH = 0.3;
+  var VAT = 0.22;
+  function kpRound(n){ return Math.round(n * 100 + 1e-8) / 100; }
+  function kpMul(a, b){
+    return Math.round(Math.round(a * 100 + 1e-8) * Math.round(b * 100 + 1e-8) / 100) / 100;
+  }
+  function kpMoney(n){
+    return new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n) + " ₽";
+  }
+  function kpLine(name, qty, unit, laborUnit, materials){
+    var oh = kpRound(laborUnit * OH);
+    var laborWith = kpRound(laborUnit + oh);
+    var labor = kpMul(qty, laborWith);
+    var matRows = (materials || []).map(function(m){
+      var q = kpRound(qty * m.per * (1 + (m.waste || 0)));
+      var amount = kpMul(q, m.price);
+      return { name: m.name, qty: q, unit: m.unit, amount: amount };
+    });
+    var matTotal = matRows.reduce(function(s, r){ return s + r.amount; }, 0);
+    return { name: name, qty: qty, unit: unit, labor: labor, materials: matRows, total: kpRound(labor + matTotal) };
+  }
+
+  var kpForm = document.getElementById("kpForm");
+  var kpPreview = document.getElementById("kpPreview");
+  var kpTotal = document.getElementById("kpTotal");
+  if(kpForm){
+    kpForm.addEventListener("submit", function(e){
+      e.preventDefault();
+      var company = document.getElementById("kp-company").value.trim();
+      var objectName = document.getElementById("kp-object").value.trim();
+      var area = parseFloat(document.getElementById("kp-area").value);
+      var lamella = parseFloat(document.getElementById("kp-lamella").value);
+      var tape = parseFloat(document.getElementById("kp-tape").value);
+      if(!company || !objectName || !(area > 0) || !(lamella > 0) || !(tape > 0)){
+        kpPreview.classList.add("is-empty");
+        kpPreview.textContent = "Укажите заказчика, объект и все три объёма больше нуля.";
+        kpTotal.hidden = true;
+        return;
+      }
+      var lines = [
+        kpLine("Подготовка поверхности", area, "м²", 2632, []),
+        kpLine("Ремонт поверхности", area, "м²", 5244.41, [
+          { name: "Mapegrout Thixotropic", per: 2, price: 63.93, unit: "кг" },
+          { name: "Манопокс 331", per: 1, price: 1125.41, unit: "кг" }
+        ]),
+        kpLine("Монтаж углеродной ламели", lamella, "м.п.", 1967.21, [
+          { name: "FibArm Lamel 1.4/150, раскрой 10%", per: 1, waste: 0.1, price: 5716.33, unit: "м.п." },
+          { name: "FibArm Resin Laminate+", per: 1.65, price: 2880.25, unit: "кг" }
+        ]),
+        kpLine("Монтаж углеродного холста", tape, "м²", 1967.21, [
+          { name: "FibArm Tape 530+, раскрой 10%", per: 1, waste: 0.1, price: 7275.41, unit: "м²" },
+          { name: "FibArm Resin 530+", per: 2.2, price: 3853.65, unit: "кг" }
+        ]),
+        kpLine("Нанесение огнезащиты Айсберг-Б", area, "м²", 2250, [
+          { name: "Айсберг-Б", per: 2.5, price: 852.46, unit: "кг" }
+        ])
+      ];
+      var labor = lines.reduce(function(s, l){ return s + l.labor; }, 0);
+      var mats = lines.reduce(function(s, l){ return s + l.materials.reduce(function(a, m){ return a + m.amount; }, 0); }, 0);
+      var net = kpRound(labor + mats);
+      var vat = kpRound(net * VAT);
+      var total = kpRound(net + vat);
+      var body = [
+        "Группа компаний SDT — предварительное коммерческое предложение",
+        "Заказчик: " + company,
+        "Объект: " + objectName,
+        "Накладные на работу: 30%",
+        ""
+      ];
+      lines.forEach(function(line, i){
+        body.push((i + 1) + ". " + line.name + " — " + line.qty + " " + line.unit);
+        body.push("   Работа с НР: " + kpMoney(line.labor));
+        line.materials.forEach(function(m){
+          body.push("   " + m.name + ": " + m.qty + " " + m.unit + " = " + kpMoney(m.amount));
+        });
+        body.push("   Итого позиция: " + kpMoney(line.total));
+      });
+      body.push("");
+      body.push("Материалы: " + kpMoney(mats));
+      body.push("Работы с накладными: " + kpMoney(labor));
+      body.push("Без НДС: " + kpMoney(net));
+      body.push("НДС 22%: " + kpMoney(vat));
+      body.push("Всего с НДС: " + kpMoney(total));
+      body.push("");
+      body.push("Аванс 70%. Работы при положительных температурах. Действует 1 месяц.");
+      kpPreview.classList.remove("is-empty");
+      kpPreview.textContent = body.join("\n");
+      kpTotal.hidden = false;
+      kpTotal.textContent = "Всего с НДС 22%: " + kpMoney(total);
+      kpPreview.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
+    });
+  }
 })();
 </script>
 </body>

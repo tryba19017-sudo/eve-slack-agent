@@ -1,34 +1,46 @@
-This is a Slack agent template for [eve](https://eve.dev).
+This is a Slack agent for [eve](https://eve.dev) that drafts **коммерческие предложения** in the format of Группа компаний SDT: external CFRP strengthening of RC walls (FibArm lamellae and tape).
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?connect=%5B%7B%22type%22%3A%22slack%22%2C%22env%22%3A%22SLACK_CONNECTOR%22%2C%22triggers%22%3Atrue%2C%22triggerPath%22%3A%22%2Feve%2Fv1%2Fslack%22%7D%5D&demo-description=An%20eve%20template%20for%20Slack%20agents%20with%20webhook%20handling%2C%20Vercel%20Connect%2C%20a%20starter%20agent%2C%20and%20an%20example%20tool%20ready%20to%20deploy%20on%20Vercel.&demo-image=https%3A%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F2mBY0MIfBcFytW99mnvinL%2Ffc3917c584ab1389af305788b8050f5d%2Fimage__1_.png&demo-title=eve%20Slack%20Agent&demo-url=https%3A%2F%2Fvercel.com%2Fkb%2Fguide%2Feve-slack-agent-starter&project-name=eve%20Slack%20Agent&repository-name=eve-slack-agent&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Feve-examples%2Ftree%2Fmain%2Feve-slack-agent-template)
+The calculator follows a live sheet (customer «МБ-Проект Бюро», walls C4/C5, 01.09.2026): labor and materials separately, **30% overhead on labor only**, VAT **22%** on top, nine standard commercial notes.
 
+## What the agent does
+
+1. Collects customer, object, and takeoff (wall m², lamella m, tape m²) — or a sketch BOM
+2. Builds the standard package: surface prep, repair, lamella install, tape install, fire protection
+3. Applies catalog unit rates and consumption (including 10% cutting waste)
+4. Returns a formatted Russian КП. Totals come only from `calculate_estimate`.
+
+### Information it needs
+
+**Required:** заказчик; что усиливаем; площадь подготовки; погонаж ламелей; площадь холста (или таблица L × b × шт.).
+
+**From the sketch:** crack injection and rebar inhibitor stay in design notes unless added as extra lines. Tape m² on the sheet may not equal hoop L×b — the agent keeps both numbers.
 
 ## Getting Started
 
-First, link the project and pull environment variables:
+The chat agent talks to **xAI Grok** (`grok-4.6`) with `XAI_API_KEY`. A Vercel AI Gateway key is not required.
+
+1. Create `.env.local` (gitignored):
 
 ```bash
-vercel link
-vercel env pull
+XAI_API_KEY=xai-...
 ```
 
-Then, run the development server:
+Get the key at [console.x.ai](https://console.x.ai). Then:
 
 ```bash
-pnpm dev
+pnpm install
+pnpm dev:ui
 ```
 
-You can start editing the agent by modifying `agent/agent.ts`. Its behavior is defined in `agent/instructions.md`, and tools live in `agent/tools/`. The agent auto-updates as you edit the files.
+Open `http://127.0.0.1:8080/agent`. If the key is missing, paste it on that page — it is stored only in `.env.local` on the machine that runs the agent.
 
-This project uses the Eve framework's bundled guides — see `node_modules/eve/dist/docs/public/` after installing dependencies.
+`localhost` on a cloud VM is not reachable from your laptop. Use the public URL from the running session, or run `pnpm dev:ui` on your computer.
 
-## Learn More
+Checks:
 
-To learn more about eve, take a look at the following resources:
+```bash
+pnpm typecheck
+pnpm test
+```
 
-- [eve documentation](https://eve.dev/docs) - learn about eve features and API.
-- [Vercel Connect](https://vercel.com/docs) - manages the Slack channel's credentials in this template.
-
-You can check out [the eve GitHub repository](https://github.com/vercel/eve) - your feedback and contributions are welcome!
-
-<img width="1552" height="1013" alt="Image Edit Request" src="https://github.com/user-attachments/assets/115c947d-1b7d-4464-8d57-91f2dd8758f0" />
+This project uses the Eve framework's bundled guides — see `node_modules/eve/docs/` after installing dependencies.

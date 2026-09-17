@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>КП 01-09/1 — усиление стен С4 и С5</title>
+<style>
+  body{margin:0;background:#f5f1e6;color:#18160f;font-family:"IBM Plex Sans",system-ui,sans-serif;line-height:1.5;padding:32px 20px 64px;}
+  main{max-width:820px;margin:0 auto;background:#fff;border:1px solid #e0d8c2;border-radius:14px;padding:36px 32px;}
+  h1{font-size:1.35rem;margin:0 0 8px;}
+  .meta{color:#6d6656;font-size:.92rem;margin-bottom:24px;}
+  pre{white-space:pre-wrap;font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.86rem;margin:0;}
+  .total{margin-top:22px;font-weight:700;font-size:1.1rem;}
+  a{color:#7b5311;}
+</style>
+</head>
+<body>
+<main>
+  <h1>Коммерческое предложение SDT</h1>
+  <p class="meta">Исх. 01-09/1 от 01.09.2026 · МБ-Проект Бюро · стены С4 и С5, +1 этаж<br>
+  <a href="/">На сайт</a> · <a href="/kp-sdt-c4-c5.txt">Скачать TXT</a></p>
+  <pre id="doc"></pre>
+  <p class="total">Всего с НДС 22%: 2 035 915,60 ₽</p>
+</main>
+<script>
+fetch("kp-sdt-c4-c5.txt").then(function(r){return r.text()}).then(function(t){
+  document.getElementById("doc").textContent = t;
+});
+</script>
+</body>
+</html>
