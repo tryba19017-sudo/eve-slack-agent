@@ -1,34 +1,55 @@
-This is a Slack agent template for [eve](https://eve.dev).
+# Telegram-бот: 3D-дизайн по планировке квартиры
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?connect=%5B%7B%22type%22%3A%22slack%22%2C%22env%22%3A%22SLACK_CONNECTOR%22%2C%22triggers%22%3Atrue%2C%22triggerPath%22%3A%22%2Feve%2Fv1%2Fslack%22%7D%5D&demo-description=An%20eve%20template%20for%20Slack%20agents%20with%20webhook%20handling%2C%20Vercel%20Connect%2C%20a%20starter%20agent%2C%20and%20an%20example%20tool%20ready%20to%20deploy%20on%20Vercel.&demo-image=https%3A%2F%2Fimages.ctfassets.net%2Fe5382hct74si%2F2mBY0MIfBcFytW99mnvinL%2Ffc3917c584ab1389af305788b8050f5d%2Fimage__1_.png&demo-title=eve%20Slack%20Agent&demo-url=https%3A%2F%2Fvercel.com%2Fkb%2Fguide%2Feve-slack-agent-starter&project-name=eve%20Slack%20Agent&repository-name=eve-slack-agent&repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Feve-examples%2Ftree%2Fmain%2Feve-slack-agent-template)
+Бот на фреймворке [eve](https://eve.dev). Пользователь отправляет в Telegram план квартиры (фото, скриншот или PDF). Бот:
 
+1. Разбирает планировку: комнаты, их расположение, двери и окна.
+2. Уточняет стиль интерьера: современный, скандинавский, лофт, минимализм, неоклассика, джапанди.
+3. Генерирует 3D-визуализацию и отправляет её в чат как фото.
+4. По запросу делает рендер отдельной комнаты, вид сверху или вариант в другом стиле.
 
-## Getting Started
+## Как устроено
 
-First, link the project and pull environment variables:
+| Файл | Назначение |
+| --- | --- |
+| `agent/agent.ts` | Модель агента (Claude через AI Gateway) |
+| `agent/instructions.md` | Поведение бота-дизайнера |
+| `agent/channels/telegram.ts` | Telegram-вебхук, приём планов, отправка рендеров через `sendPhoto` |
+| `agent/tools/render_3d_design.ts` | Генерация 3D-рендера по плану через модель изображений (по умолчанию `google/gemini-3-pro-image`) |
+
+## Настройка
+
+1. Создайте бота у [@BotFather](https://t.me/BotFather) и получите токен.
+2. Задайте переменные окружения (локально в `.env.local`, на Vercel в Project Settings → Environment Variables):
 
 ```bash
-vercel link
-vercel env pull
+TELEGRAM_BOT_TOKEN=123456:ABC...          # токен от BotFather
+TELEGRAM_WEBHOOK_SECRET_TOKEN=any-random-string
+TELEGRAM_BOT_USERNAME=my_design_bot       # необязательно, нужно для групп
+AI_GATEWAY_API_KEY=...                     # или OIDC-токен после `vercel env pull`
+IMAGE_MODEL=google/gemini-3-pro-image      # необязательно
 ```
 
-Then, run the development server:
+3. Задеплойте (например, `vercel deploy`) и зарегистрируйте вебхук:
 
 ```bash
+curl -X POST "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://<your-app>.vercel.app/eve/v1/telegram",
+       "secret_token":"'"$TELEGRAM_WEBHOOK_SECRET_TOKEN"'",
+       "allowed_updates":["message","callback_query"]}'
+```
+
+4. Напишите боту `/start` и отправьте план квартиры.
+
+## Локальная разработка
+
+Нужен Node.js 24+.
+
+```bash
+pnpm install
 pnpm dev
 ```
 
-You can start editing the agent by modifying `agent/agent.ts`. Its behavior is defined in `agent/instructions.md`, and tools live in `agent/tools/`. The agent auto-updates as you edit the files.
+Чтобы Telegram достучался до локального сервера, откройте туннель (например, `ngrok http 3000`) и укажите его URL в `setWebhook`.
 
-This project uses the Eve framework's bundled guides — see `node_modules/eve/dist/docs/public/` after installing dependencies.
-
-## Learn More
-
-To learn more about eve, take a look at the following resources:
-
-- [eve documentation](https://eve.dev/docs) - learn about eve features and API.
-- [Vercel Connect](https://vercel.com/docs) - manages the Slack channel's credentials in this template.
-
-You can check out [the eve GitHub repository](https://github.com/vercel/eve) - your feedback and contributions are welcome!
-
-<img width="1552" height="1013" alt="Image Edit Request" src="https://github.com/user-attachments/assets/115c947d-1b7d-4464-8d57-91f2dd8758f0" />
+Документация eve лежит в `node_modules/eve/docs/` после установки зависимостей.
