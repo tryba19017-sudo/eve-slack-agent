@@ -192,6 +192,7 @@ main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min
         <button type="button" data-cam="iso" aria-pressed="true">Изометрия</button>
         <button type="button" data-cam="top" aria-pressed="false">Сверху</button>
         <button type="button" data-cam="room" aria-pressed="false">Комната</button>
+        <button type="button" data-cam="photo" aria-pressed="false">Фото</button>
       </div>
       <label class="chk"><input type="checkbox" id="cutaway" checked> Срез стен</label>
       <div class="calib" id="calib" hidden>
@@ -213,6 +214,8 @@ main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/geometries/RoundedBoxGeometry.js"></script>
 <script>
 (() => {
 "use strict";
@@ -265,6 +268,7 @@ const state = {
   mode: "3d",
   cam: "iso",
   cutaway: true,
+  photo: false,
   image: null,       // { url, img, file }
   imgWidth: 11,
   imgAlpha: 0.5,
@@ -555,7 +559,10 @@ controls.maxPolarAngle = Math.PI / 2 - 0.02;
 controls.minDistance = 1.2;
 controls.maxDistance = 60;
 
-const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8174, 0.75);
+// Мягкий рассеянный свет и отражения от студийного окружения
+const pmrem = new THREE.PMREMGenerator(renderer);
+if (THREE.RoomEnvironment) scene.environment = pmrem.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+const hemi = new THREE.HemisphereLight(0xffffff, 0x8a8174, scene.environment ? 0.3 : 0.75);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff3e2, 0.9);
 sun.castShadow = true;
@@ -572,7 +579,8 @@ const matCache = new Map();
 function mat(color, opts = {}) {
   const key = color + JSON.stringify(opts);
   if (matCache.has(key)) return matCache.get(key);
-  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), roughness: opts.rough ?? 0.75, metalness: opts.metal ?? 0, transparent: !!opts.opacity, opacity: opts.opacity ?? 1 });
+  const m = new THREE.MeshStandardMaterial({ color: new THREE.Color(color).convertSRGBToLinear(), roughness: opts.rough ?? 0.75, metalness: opts.metal ?? 0, transparent: !!opts.opacity, opacity: opts.opacity ?? 1, envMapIntensity: opts.env ?? 0.55 });
+  if (opts.emissive) { m.emissive = new THREE.Color(opts.emissive).convertSRGBToLinear(); m.emissiveIntensity = 0.9; }
   matCache.set(key, m);
   return m;
 }
@@ -582,6 +590,13 @@ function box(parent, w, h, d, x, y, z, material, shadow = true) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
   m.position.set(x, y, z);
   m.castShadow = shadow; m.receiveShadow = true;
+  parent.add(m); return m;
+}
+function rbox(parent, w, h, d, x, y, z, material, radius) {
+  const r = Math.min(radius, Math.min(w, h, d) / 2 - 0.001);
+  if (!THREE.RoundedBoxGeometry || r < 0.004) return box(parent, w, h, d, x, y, z, material);
+  const m = new THREE.Mesh(new THREE.RoundedBoxGeometry(w, h, d, 3, r), material);
+  m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true;
   parent.add(m); return m;
 }
 function cyl(parent, rt, rb, h, x, y, z, material) {
@@ -601,7 +616,7 @@ function wallMaterial(kind, st) {
     case "moldings": return tex("moldings", st.wall, st.wall);
     case "brick": return tex("brick", st.brick || "#9c6450");
     case "tile": return tex("walltile", st.tile, st.tile, 0.3);
-    case "slats": return mat(shade(st.wood, -0.3), { rough: 0.95 });
+    case "slats": return mat(st.wall, { rough: 0.92 });
     default: return mat(st.wall, { rough: 0.92 });
   }
 }
@@ -641,6 +656,7 @@ function buildWallEdge(group, r, e, openings, st, kind = "paint") {
       seg(o.a, o.b, 0, Math.min(sill, H), wallMat); topCap(o.a, o.b);
       if (H > sill) seg(o.a, o.b, sill, Math.min(top, H), glassMat);
       if (H > top) seg(o.a, o.b, top, H, wallMat);
+      if (o.kind === "window" && ["living", "bedroom", "kids", "office"].includes(r.type)) addCurtains(group, e, o, st, H);
       if (H > sill) { // подоконник
         const len = o.b - o.a + 0.1, mid = (o.a + o.b) / 2, dz = (e.side === "N" || e.side === "W") ? 0.12 : -0.12;
         if (e.horiz) box(group, len, 0.03, 0.2, mid, sill, e.c + dz, mat(st.light, { rough: 0.4 }));
@@ -654,6 +670,33 @@ function buildWallEdge(group, r, e, openings, st, kind = "paint") {
   }
   seg(cur, e.b, 0, H, wallMat); topCap(cur, e.b);
   if (kind === "slats") addSlats(group, e, ops, st, H);
+}
+
+// Шторы из волнистой ткани по бокам окна и карниз
+function addCurtains(group, e, o, st, H) {
+  const top = Math.min(H, 2.62), h = top - 0.03;
+  if (h < 0.3) return;
+  const sign = (e.side === "N" || e.side === "W") ? 1 : -1;
+  const face = e.c + sign * (WALL_T + 0.1);
+  const fabric = new THREE.MeshStandardMaterial({ color: new THREE.Color(shade(st.light, -0.05)).convertSRGBToLinear(), roughness: 1, side: THREE.DoubleSide, envMapIntensity: 0.4 });
+  const pw = 0.5;
+  for (const at of [o.a - 0.06, o.b + 0.06]) {
+    const g = new THREE.PlaneGeometry(pw, h, 36, 1);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) pos.setZ(i, Math.sin((pos.getX(i) / pw) * Math.PI * 8) * 0.03);
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, fabric); m.castShadow = true; m.receiveShadow = true;
+    if (e.horiz) m.position.set(at, 0.03 + h / 2, face);
+    else { m.rotation.y = Math.PI / 2; m.position.set(face, 0.03 + h / 2, at); }
+    group.add(m);
+  }
+  if (!state.cutaway) {
+    const len = o.b - o.a + 1.0, mid = (o.a + o.b) / 2;
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 12), mat(st.metal, { rough: 0.3, metal: 0.7 }));
+    rod.rotation.z = Math.PI / 2; if (!e.horiz) rod.rotation.set(Math.PI / 2, 0, 0);
+    if (e.horiz) rod.position.set(mid, top + 0.01, face); else rod.position.set(face, top + 0.01, mid);
+    group.add(rod);
+  }
 }
 
 // Ламели: вертикальные рейки с шагом 6 см на внутренней грани стены
@@ -677,6 +720,15 @@ function addSlats(group, e, ops, st, H) {
   });
   im.castShadow = true; im.receiveShadow = true;
   group.add(im);
+  // тёмная войлочная подложка под каждой непрерывной группой реек
+  const felt = mat(shade(st.wood, -0.35), { rough: 1 });
+  let start = xs[0];
+  for (let i = 1; i <= xs.length; i++) {
+    if (i < xs.length && xs[i] - xs[i - 1] < pitch * 1.5) continue;
+    const a = start - sw / 2, b = xs[i - 1] + sw / 2, len = b - a, mid = (a + b) / 2, f = e.c + sign * WALL_T + sign * 0.003;
+    if (e.horiz) box(group, len, h, 0.006, mid, 0.05 + h / 2, f, felt, false); else box(group, 0.006, h, len, f, 0.05 + h / 2, mid, felt, false);
+    if (i < xs.length) start = xs[i];
+  }
 }
 
 // Мебель: локальные координаты вдоль «задней» стены. u — вдоль стены, v — от стены вглубь.
@@ -696,10 +748,12 @@ function makePlacer(group, r, side) {
   const P = {
     L: along - 2 * T, D: depth - 2 * T, // внутренняя длина стены и глубина
     // u, v — от внутренней грани стен
-    box(u, v, w, d, h, y0, material) {
+    box(u, v, w, d, h, y0, material) { return P.soft(u, v, w, d, h, y0, material, 0.008); },
+    // мягкие скруглённые формы: подушки, матрасы, обивка
+    soft(u, v, w, d, h, y0, material, radius) {
       if (u - w / 2 < -0.001 || u + w / 2 > P.L + 0.001 || v - d / 2 < -0.001 || v + d / 2 > P.D + 0.001) return null;
       const [X, Z] = toWorld(u + T, v + T);
-      return swap ? box(group, d, h, w, X, y0 + h / 2, Z, material) : box(group, w, h, d, X, y0 + h / 2, Z, material);
+      return swap ? rbox(group, d, h, w, X, y0 + h / 2, Z, material, radius) : rbox(group, w, h, d, X, y0 + h / 2, Z, material, radius);
     },
     cyl(u, v, rt, rb, h, y0, material) {
       const [X, Z] = toWorld(u + T, v + T);
@@ -717,15 +771,53 @@ function makePlacer(group, r, side) {
 
 function chair(P, u, v, facing, st) {
   // facing: +1 — спинка у меньшего v, -1 — у большего
-  const wood = mat(st.wood, { rough: 0.6 }), fab = mat(st.fabric);
-  P.box(u, v, 0.44, 0.44, 0.05, 0.43, fab);
-  P.box(u, v - facing * 0.2, 0.44, 0.04, 0.45, 0.46, wood);
-  for (const du of [-0.19, 0.19]) for (const dv of [-0.19, 0.19]) P.box(u + du, v + dv, 0.035, 0.035, 0.43, 0, wood);
+  const wood = mat(st.wood, { rough: 0.55 }), fab = mat(st.fabric, { rough: 0.95 });
+  P.soft(u, v + facing * 0.02, 0.44, 0.42, 0.06, 0.44, fab, 0.025);
+  P.soft(u, v - facing * 0.2, 0.42, 0.035, 0.42, 0.5, wood, 0.012);
+  for (const du of [-0.18, 0.18]) for (const dv of [-0.17, 0.17]) P.cyl(u + du, v + dv, 0.016, 0.013, 0.44, 0, wood);
 }
 function plant(P, u, v, st, big = true) {
   const s = big ? 1 : 0.6;
-  P.cyl(u, v, 0.16 * s, 0.12 * s, 0.35 * s, 0, mat(st.light, { rough: 0.5 }));
-  P.sphere(u, v, 0.3 * s, 0.35 * s + 0.26 * s, mat("#5f7f55", { rough: 0.9 }));
+  P.cyl(u, v, 0.16 * s, 0.12 * s, 0.34 * s, 0, mat(st.light, { rough: 0.5 }));
+  const leaf = mat("#5d7d4f", { rough: 0.85 }), leaf2 = mat("#72925f", { rough: 0.85 });
+  const rnd = rand(Math.round(u * 100 + v * 10) + 3);
+  for (let k = 0; k < 7; k++) {
+    const a = rnd() * Math.PI * 2, rr = rnd() * 0.12 * s;
+    P.sphere(u + Math.cos(a) * rr, v + Math.sin(a) * rr, (0.1 + rnd() * 0.09) * s, (0.42 + rnd() * 0.45) * s, k % 2 ? leaf : leaf2);
+  }
+}
+// Шкаф с фасадами, зазорами и ручками. frontDir: +1 — фасад к большему v.
+function cabinet(P, u, v, w, d, h, y0, bodyMat, frontMat, handleMat, frontDir, doorW = 0.5) {
+  if (!P.fits(u, v, w, d)) return false;
+  P.box(u, v, w, d, h, y0, bodyMat);
+  const n = Math.max(1, Math.round(w / doorW)), fw = w / n;
+  for (let i = 0; i < n; i++) {
+    const fu = u - w / 2 + fw * (i + 0.5);
+    P.box(fu, v + frontDir * (d / 2 + 0.006), fw - 0.008, 0.012, h - 0.012, y0 + 0.006, frontMat);
+    const hu = fu + (i % 2 ? -1 : 1) * (fw / 2 - 0.05);
+    P.box(hu, v + frontDir * (d / 2 + 0.022), 0.014, 0.02, Math.min(0.32, h * 0.35), y0 + (h > 1.2 ? 0.95 : h * 0.55), handleMat);
+  }
+  return true;
+}
+const artCache = new Map();
+function artTexture(st) {
+  const key = st.accent + st.fabric + st.wood + st.light;
+  if (artCache.has(key)) return artCache.get(key);
+  const c = document.createElement("canvas"); c.width = 300; c.height = 210;
+  const g = c.getContext("2d");
+  g.fillStyle = shade(st.light, -0.02); g.fillRect(0, 0, 300, 210);
+  g.fillStyle = st.accent; g.globalAlpha = 0.9; g.beginPath(); g.arc(110, 120, 58, 0, Math.PI * 2); g.fill();
+  g.fillStyle = st.fabric; g.beginPath(); g.moveTo(150, 210); g.lineTo(150, 90); g.arc(205, 90, 55, Math.PI, 0); g.lineTo(260, 210); g.fill();
+  g.globalAlpha = 1; g.strokeStyle = st.wood; g.lineWidth = 5; g.beginPath(); g.moveTo(30, 60); g.bezierCurveTo(90, 20, 160, 70, 270, 40); g.stroke();
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding;
+  artCache.set(key, t); return t;
+}
+// Картина в раме на задней стене; yc — центр по высоте
+function wallArt(P, u, yc, w, h, st) {
+  if (!P.fits(u, 0.02, w + 0.06, 0.03)) return;
+  P.box(u, 0.015, w + 0.06, 0.03, h + 0.06, yc - (h + 0.06) / 2, mat(shade(st.wood, -0.15), { rough: 0.5 }));
+  const m = P.box(u, 0.032, w, 0.004, h, yc - h / 2, mat("#ffffff"));
+  if (m) m.material = new THREE.MeshStandardMaterial({ map: artTexture(st), roughness: 0.9, envMapIntensity: 0.4 });
 }
 
 // «Задняя» стена комнаты: самая длинная без дверей, по возможности без окон.
@@ -753,21 +845,41 @@ function furnish(group, r, st, openings) {
     case "living": {
       const sw = Math.min(2.4, L - 0.8);
       if (sw >= 1.4 && D >= 2.6) {
-        const u = L / 2;
-        P.box(u, 0.45, sw, 0.9, 0.42, 0, fab);
-        P.box(u, 0.1, sw, 0.2, 0.42, 0.42, fab);
-        P.box(u - sw / 2 + 0.1, 0.45, 0.2, 0.9, 0.2, 0.42, fab);
-        P.box(u + sw / 2 - 0.1, 0.45, 0.2, 0.9, 0.2, 0.42, fab);
-        P.box(u - sw / 4, 0.28, 0.5, 0.14, 0.4, 0.45, acc);
-        P.box(Math.min(L - 0.3, 3.0), 1.75, Math.min(sw + 0.6, L - 0.4), Math.min(2.0, D - 2.2), 0.012, 0, mat(shade(st.fabric, 0.12)), false);
-        P.box(u, 1.55, 1.0, 0.55, 0.38, 0, wood);
-        const tvv = D - 0.22;
-        P.box(u, tvv, Math.min(1.8, L - 0.6), 0.4, 0.45, 0, wood);
-        P.box(u, tvv + 0.12, 1.25, 0.05, 0.72, 0.8, dark);
-        if (P.fits(0.25, 0.3, 0.3, 0.3)) { P.cyl(0.25, 0.3, 0.14, 0.14, 0.03, 0, metal); P.cyl(0.25, 0.3, 0.012, 0.012, 1.45, 0, metal); P.cyl(0.25, 0.3, 0.12, 0.2, 0.25, 1.4, white); }
+        const u = L / 2, dep = 0.95, armW = 0.18, legH = 0.1, baseH = 0.2, seatH = 0.2;
+        const legMat = mat(shade(st.wood, -0.2), { rough: 0.5 });
+        // диван: основание, подлокотники, подушки сиденья и спинки, ножки
+        P.soft(u, dep / 2, sw, dep, baseH, legH, fab, 0.04);
+        P.soft(u - sw / 2 + armW / 2, dep / 2, armW, dep, 0.38, legH, fab, 0.07);
+        P.soft(u + sw / 2 - armW / 2, dep / 2, armW, dep, 0.38, legH, fab, 0.07);
+        P.soft(u, 0.1, sw - 0.02, 0.2, 0.42, legH + baseH - 0.02, fab, 0.06);
+        const n = sw > 2 ? 3 : 2, cw = (sw - 2 * armW) / n;
+        for (let i = 0; i < n; i++) {
+          const cu = u - sw / 2 + armW + cw * (i + 0.5);
+          P.soft(cu, dep / 2 + 0.1, cw - 0.012, dep - 0.34, seatH, legH + baseH, fab, 0.07);
+          P.soft(cu, 0.3, cw - 0.02, 0.2, 0.42, legH + baseH + 0.04, fab, 0.09);
+        }
+        for (const du of [-sw / 2 + 0.07, sw / 2 - 0.07]) for (const dv of [0.08, dep - 0.08]) P.cyl(u + du, dv, 0.02, 0.015, legH, 0, legMat);
+        P.soft(u - sw / 2 + armW + 0.24, 0.47, 0.44, 0.13, 0.42, legH + baseH + seatH - 0.03, acc, 0.06);
+        P.soft(u + sw / 2 - armW - 0.24, 0.47, 0.42, 0.13, 0.4, legH + baseH + seatH - 0.03, mat(shade(st.fabric, 0.15), { rough: 1 }), 0.06);
+        // ковёр
+        P.soft(u, 1.75, Math.min(sw + 0.6, L - 0.4), Math.min(2.0, D - 2.2), 0.014, 0, mat(shade(st.fabric, 0.12), { rough: 1 }), 0.006);
+        // журнальный столик: столешница на тонких ножках, книги и чаша
+        P.soft(u, 1.6, 1.0, 0.55, 0.035, 0.36, wood, 0.012);
+        for (const du of [-0.44, 0.44]) for (const dv of [-0.21, 0.21]) P.cyl(u + du, 1.6 + dv, 0.014, 0.014, 0.36, 0, metal);
+        P.box(u - 0.25, 1.58, 0.24, 0.17, 0.03, 0.395, acc); P.box(u - 0.25, 1.58, 0.22, 0.16, 0.025, 0.425, white);
+        P.cyl(u + 0.2, 1.62, 0.1, 0.06, 0.06, 0.395, mat(st.light, { rough: 0.2, env: 1 }));
+        // ТВ-зона: тумба с фасадами на ножках, экран
+        const tvv = D - 0.22, tw = Math.min(1.8, L - 0.6);
+        if (cabinet(P, u, tvv, tw, 0.4, 0.4, 0.12, wood, mat(shade(st.wood, 0.04), { rough: 0.5 }), metal, -1, 0.6)) {
+          for (const du of [-tw / 2 + 0.06, tw / 2 - 0.06]) for (const dv of [-0.14, 0.14]) P.cyl(u + du, tvv + dv, 0.015, 0.012, 0.12, 0, metal);
+        }
+        P.box(u, tvv + 0.12, 1.3, 0.035, 0.74, 0.85, mat("#0e0f10", { rough: 0.12, metal: 0.4, env: 1 }));
+        if (P.fits(0.25, 0.3, 0.3, 0.3)) { P.cyl(0.25, 0.3, 0.14, 0.14, 0.03, 0, metal); P.cyl(0.25, 0.3, 0.012, 0.012, 1.45, 0, metal); P.cyl(0.25, 0.3, 0.12, 0.2, 0.25, 1.4, mat(st.light, { rough: 0.6, emissive: state.photo ? "#fff1d6" : null })); }
+        if (H >= 2.2 && ["none", "plaster", "brick", "moldings"].includes(finishFor(r).accent)) wallArt(P, u, 1.55, Math.min(1.1, sw * 0.5), 0.72, st);
         add(`диван ${fmt(sw)} м`, "журнальный столик", "ковёр", "ТВ-тумба и телевизор");
         if (P.fits(0.25, 0.3, 0.3, 0.3)) add("торшер");
         if (P.fits(L - 0.3, D - 0.6, 0.4, 0.4)) { plant(P, L - 0.3, D - 0.6, st); add("напольное растение"); }
+        if (H >= 2.2 && ["none", "plaster", "brick", "moldings"].includes(finishFor(r).accent)) add("картина в раме");
       }
       break;
     }
@@ -775,19 +887,35 @@ function furnish(group, r, st, openings) {
       const kid = r.type === "kids";
       const bw = kid ? 0.9 : (L >= 2.8 ? 1.6 : 1.4), bl = kid ? 1.9 : 2.0;
       const u = kid ? bw / 2 + 0.05 : L / 2;
-      if (P.fits(u, bl / 2, bw, bl)) {
-        P.box(u, bl / 2, bw, bl, 0.3, 0, wood);
-        P.box(u, bl / 2 + 0.02, bw - 0.06, bl - 0.08, 0.2, 0.3, white);
-        P.box(u, 0.04, bw + 0.1, 0.08, 1.0, 0, kid ? acc : fab);
-        for (const du of kid ? [0] : [-bw / 4, bw / 4]) P.box(u + du, 0.3, bw / (kid ? 1.4 : 2.4), 0.3, 0.12, 0.5, white);
-        P.box(u, bl * 0.62, bw + 0.04, bl * 0.72, 0.06, 0.5, acc);
+      if (P.fits(u, bl / 2 + 0.02, bw + 0.08, bl + 0.04)) {
+        const linen = mat(shade(st.light, -0.02), { rough: 1 }), duvet = mat(shade(st.light, -0.05), { rough: 1 });
+        P.soft(u, bl / 2 + 0.02, bw + 0.08, bl + 0.04, 0.26, 0.07, kid ? wood : fab, 0.03);
+        for (const du of [-bw / 2, bw / 2]) for (const dv of [0.1, bl - 0.06]) P.cyl(u + du, dv, 0.02, 0.018, 0.07, 0, mat(shade(st.wood, -0.2)));
+        P.soft(u, bl / 2 + 0.03, bw - 0.02, bl - 0.06, 0.22, 0.33, linen, 0.07);
+        P.soft(u, bl * 0.6, bw + 0.08, bl * 0.8, 0.09, 0.5, duvet, 0.05);
+        P.soft(u, bl * 0.86, bw + 0.12, 0.42, 0.1, 0.51, acc, 0.035);
+        for (const du of kid ? [0] : [-bw / 4, bw / 4]) P.soft(u + du, 0.28, (kid ? bw - 0.2 : bw / 2 - 0.08), 0.3, 0.17, 0.55, linen, 0.07);
+        if (!kid) for (const du of [-bw / 6, bw / 6]) P.soft(u + du, 0.46, 0.38, 0.12, 0.3, 0.58, acc, 0.05);
+        P.soft(u, 0.05, bw + 0.2, 0.1, kid ? 0.9 : 1.1, 0.02, kid ? acc : fab, 0.045);
         add(kid ? "кровать 90×190" : `кровать ${bw * 100}×200`, "покрывало в акцентном цвете");
         if (!kid) add("прикроватные тумбы с лампами");
-        if (!kid) for (const s of [-1, 1]) { const nu = u + s * (bw / 2 + 0.28); if (P.fits(nu, 0.22, 0.45, 0.4)) { P.box(nu, 0.22, 0.45, 0.4, 0.5, 0, wood); P.cyl(nu, 0.22, 0.08, 0.11, 0.3, 0.5, white); } }
+        if (!kid) for (const s2 of [-1, 1]) {
+          const nu = u + s2 * (bw / 2 + 0.34);
+          if (cabinet(P, nu, 0.22, 0.45, 0.4, 0.45, 0.08, wood, mat(shade(st.wood, 0.05), { rough: 0.5 }), metal, 1, 0.5)) {
+            P.cyl(nu, 0.22, 0.05, 0.07, 0.26, 0.53, mat(st.light, { rough: 0.4 }));
+            P.cyl(nu, 0.22, 0.1, 0.14, 0.18, 0.79, mat(st.light, { rough: 0.8, emissive: state.photo ? "#fff1d6" : null }));
+          }
+        }
+        if (H >= 2.2 && !kid && ["none", "plaster", "brick", "moldings"].includes(finishFor(r).accent)) { wallArt(P, u, 1.7, Math.min(1.0, bw * 0.6), 0.6, st); add("картина в раме"); }
       }
       const wv = D - 0.31, ww = Math.min(2.0, L - 0.9);
-      if (D - bl > 1.4 && ww > 0.8) { P.box(L - ww / 2 - 0.05, wv, ww, 0.6, tallCap(2.2), 0, white); add(`шкаф ${fmt(ww)} м`); }
-      if (kid && P.fits(L - 0.65, 0.3, 1.1, 0.6)) { P.box(L - 0.65, 0.3, 1.1, 0.6, 0.04, 0.72, wood); P.box(L - 0.65, 0.3, 1.0, 0.5, 0.72, 0, white); chair(P, L - 0.65, 0.85, -1, st); add("письменный стол со стулом"); }
+      if (D - bl > 1.4 && ww > 0.8 && cabinet(P, L - ww / 2 - 0.05, wv, ww, 0.6, tallCap(2.3), 0, white, white, metal, -1)) add(`шкаф ${fmt(ww)} м`);
+      if (kid && P.fits(L - 0.65, 0.3, 1.1, 0.6)) {
+        P.soft(L - 0.65, 0.3, 1.1, 0.6, 0.035, 0.72, wood, 0.01);
+        cabinet(P, L - 0.95, 0.3, 0.45, 0.55, 0.7, 0.02, white, white, metal, 1);
+        for (const dv of [0.06, 0.54]) P.cyl(L - 0.16, dv, 0.015, 0.015, 0.72, 0, metal);
+        chair(P, L - 0.65, 0.85, -1, st); add("письменный стол со стулом");
+      }
       break;
     }
     case "kitchen": {
@@ -795,24 +923,35 @@ function furnish(group, r, st, openings) {
       const u0 = 0.05;
       const fw = 0.62;
       if (cl > 1.6) {
-        P.box(u0 + fw / 2, 0.33, fw, 0.65, tallCap(2.0), 0, white);
+        const front = mat(st.wood, { rough: 0.45 }), stone = mat(st.tile, { rough: 0.2, env: 0.9 });
+        cabinet(P, u0 + fw / 2, 0.33, fw, 0.63, tallCap(2.05), 0, white, mat(st.light, { rough: 0.25, env: 0.9 }), metal, 1, 0.7);
         const ru = u0 + fw + (cl - fw) / 2, rw = cl - fw;
-        P.box(ru, 0.3, rw, 0.6, 0.86, 0, mat(st.wood, { rough: 0.5 }));
-        P.box(ru, 0.3, rw, 0.62, 0.04, 0.86, mat(st.tile, { rough: 0.25 }));
-        P.box(ru - rw * 0.2, 0.3, 0.5, 0.4, 0.012, 0.9, metal);
-        P.box(ru + rw * 0.25, 0.3, 0.58, 0.5, 0.012, 0.9, dark);
-        if (!state.cutaway) P.box(ru, 0.18, rw, 0.35, 0.7, 1.5, white);
+        P.box(ru, 0.28, rw, 0.5, 0.1, 0, mat("#2b2b2b", { rough: 0.8 }));
+        cabinet(P, ru, 0.29, rw, 0.56, 0.76, 0.1, white, front, metal, 1, 0.6);
+        P.box(ru, 0.31, rw, 0.62, 0.04, 0.86, stone);
+        P.box(ru - rw * 0.2, 0.3, 0.5, 0.4, 0.01, 0.901, mat("#9ea3a6", { rough: 0.25, metal: 0.8, env: 1 }));
+        P.cyl(ru - rw * 0.2, 0.08, 0.015, 0.015, 0.3, 0.9, metal);
+        P.box(ru + rw * 0.25, 0.3, 0.58, 0.5, 0.008, 0.901, mat("#0c0c0d", { rough: 0.1, env: 1 }));
+        if (!state.cutaway) {
+          const tile = new THREE.MeshStandardMaterial({ map: texFor("walltile", st.tile, rw, 0.6, st.tile), roughness: 0.25 });
+          const bs = P.box(ru, 0.004, rw, 0.008, 0.6, 0.9, stone); if (bs) bs.material = tile;
+          cabinet(P, ru - 0.2, 0.18, rw - 0.8, 0.34, 0.72, 1.5, white, front, metal, 1, 0.6);
+          P.box(ru + rw * 0.25, 0.18, 0.6, 0.36, 0.08, 1.62, metal);
+          P.box(ru + rw * 0.25, 0.1, 0.25, 0.2, 0.55, 1.7, metal);
+        }
         add(`кухонный гарнитур ${fmt(cl)} м`, "холодильник", "мойка и варочная панель");
       }
       const tv = Math.min(D * 0.62, D - 0.9);
       if (D > 2.4 && P.fits(L / 2, tv, 1.2, 0.8)) {
-        P.box(L / 2, tv, 1.2, 0.8, 0.04, 0.72, wood);
-        P.box(L / 2, tv, 0.08, 0.08, 0.72, 0, metal);
-        P.box(L / 2, tv, 0.5, 0.5, 0.02, 0, metal);
+        P.soft(L / 2, tv, 1.2, 0.8, 0.035, 0.72, wood, 0.012);
+        for (const du of [-0.54, 0.54]) for (const dv of [-0.34, 0.34]) P.cyl(L / 2 + du, tv + dv, 0.02, 0.018, 0.72, 0, wood);
         chair(P, L / 2 - 0.3, tv - 0.6, -1, st); chair(P, L / 2 + 0.3, tv - 0.6, -1, st);
         chair(P, L / 2 - 0.3, tv + 0.6, 1, st); chair(P, L / 2 + 0.3, tv + 0.6, 1, st);
-        const lamp = P.cyl(L / 2, tv, 0.22, 0.05, 0.18, Math.min(H, 2.1) - 0.3, acc);
-        if (state.cutaway) lamp.visible = false;
+        P.cyl(L / 2, tv, 0.12, 0.09, 0.09, 0.755, mat(st.light, { rough: 0.2, env: 1 }));
+        if (!state.cutaway) {
+          P.cyl(L / 2, tv, 0.004, 0.004, WALL_H - 1.75, 1.75, dark);
+          P.cyl(L / 2, tv, 0.06, 0.24, 0.2, 1.55, mat(st.accent, { rough: 0.5, emissive: state.photo ? "#3a2a18" : null }));
+        }
         add("обеденный стол 120×80", "4 стула", "подвесной светильник");
       }
       break;
@@ -838,7 +977,7 @@ function furnish(group, r, st, openings) {
     }
     case "hallway": {
       const ww = Math.min(1.8, L - 0.3);
-      if (ww > 0.8) { P.box(ww / 2 + 0.05, 0.23, ww, 0.45, tallCap(2.2), 0, white); add(`шкаф-купе ${fmt(ww)} м`); }
+      if (ww > 0.8 && cabinet(P, ww / 2 + 0.05, 0.23, ww, 0.45, tallCap(2.3), 0, white, white, metal, 1, 0.6)) add(`шкаф-купе ${fmt(ww)} м`);
       if (P.fits(ww + 0.65, 0.2, 1.0, 0.38)) { P.box(ww + 0.65, 0.2, 1.0, 0.38, 0.45, 0, wood); P.box(ww + 0.65, 0.02, 0.6, 0.02, tallCap(1.2), 0.75, mat("#cfe0e4", { rough: 0.05, metal: 0.4 })); add("банкетка", "зеркало"); }
       if (P.fits(L / 2, D / 2, Math.min(2.2, L - 0.4), Math.min(1.0, D - 0.9))) P.box(L / 2, D / 2 + 0.2, Math.min(2.2, L - 0.4), Math.min(1.0, D - 0.9), 0.012, 0, mat(shade(st.fabric, 0.1)), false);
       if (P.fits(L - 0.3, D - 0.35, 0.4, 0.4)) plant(P, L - 0.3, D - 0.35, st, false);
@@ -944,13 +1083,24 @@ function rebuild3D() {
     floor.receiveShadow = true;
     floor.userData.roomId = r.id;
     g.add(floor); floorMeshes.push(floor);
-    if (state.selected === r.id) {
+    if (state.selected === r.id && !state.photo) {
       const ring = new THREE.Mesh(new THREE.PlaneGeometry(r.w - 0.2, r.d - 0.2), new THREE.MeshBasicMaterial({ color: new THREE.Color(getVar("--accent")), transparent: true, opacity: 0.18, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.position.set(r.x + r.w / 2, 0.006, r.y + r.d / 2); g.add(ring);
     }
     const fin = finishFor(r), back = backSideOf(r, openings);
     for (const e of edgesOf(r)) buildWallEdge(g, r, e, openings, rst, fin.accent !== "none" && e.side === back ? fin.accent : fin.walls);
     roomItems.set(r.id, furnish(g, r, rst, openings));
+    if (state.photo) {
+      const cx = r.x + r.w / 2, cz = r.y + r.d / 2;
+      const ceil = new THREE.Mesh(new THREE.PlaneGeometry(r.w, r.d), mat("#f5f4f1", { rough: 0.95 }));
+      ceil.rotation.x = Math.PI / 2; ceil.position.set(cx, WALL_H, cz); g.add(ceil);
+      if (r.type !== "kitchen") {
+        const fix = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.05, 32), mat("#ffffff", { rough: 0.4, emissive: "#fff3e0" }));
+        fix.position.set(cx, WALL_H - 0.03, cz); g.add(fix);
+      }
+      const lamp = new THREE.PointLight(0xffdfba, r.type === "balcony" ? 0.15 : 0.45, Math.max(r.w, r.d) * 2.2, 2);
+      lamp.position.set(cx, WALL_H - 0.35, cz); g.add(lamp);
+    }
   }
 
   const cx = (bbox.x0 + bbox.x1) / 2, cz = (bbox.y0 + bbox.y1) / 2, span = Math.max(bw, bd);
@@ -963,7 +1113,37 @@ function rebuild3D() {
 
 function getVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim() || "#888"; }
 
+// Камера «как на фото»: у стены напротив главной, на высоте глаз, взгляд под углом
+function photoCam(r) {
+  const back = backSideOf(r, lastOpenings);
+  const cx = r.x + r.w / 2, cz = r.y + r.d / 2;
+  const B = { N: [cx, r.y], S: [cx, r.y + r.d], W: [r.x, cz], E: [r.x + r.w, cz] }[back];
+  const dx = cx - B[0], dz = cz - B[1], half = Math.hypot(dx, dz) || 1, nx = dx / half, nz = dz / half;
+  const along = back === "N" || back === "S" ? r.w : r.d, px = -nz, pz = nx, side = along * 0.26;
+  const pos = new THREE.Vector3(cx + nx * half * 0.8 + px * side, 1.45, cz + nz * half * 0.8 + pz * side);
+  const look = new THREE.Vector3(B[0] - px * side * 0.5, 1.0, B[1] - pz * side * 0.5);
+  return { pos, look };
+}
+function photoLights(on) {
+  sun.intensity = on ? 0.55 : 0.9;
+  hemi.intensity = scene.environment ? (on ? 0.12 : 0.3) : 0.75;
+  renderer.toneMappingExposure = on ? 0.92 : 1.05;
+}
+function setPhoto(on) {
+  if (state.photo === on) return;
+  state.photo = on;
+  if (on) { state.cutawayBefore = state.cutaway; state.cutaway = false; }
+  else state.cutaway = state.cutawayBefore ?? true;
+  document.getElementById("cutaway").checked = state.cutaway;
+  camera.fov = on ? 62 : 40; camera.updateProjectionMatrix();
+  controls.minDistance = on ? 0.05 : 1.2;
+  controls.maxPolarAngle = on ? Math.PI * 0.75 : Math.PI / 2 - 0.02;
+  photoLights(on);
+  rebuild3D();
+}
+
 function setCamera(which) {
+  setPhoto(which === "photo");
   state.cam = which;
   document.querySelectorAll("#camSeg button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.cam === which)));
   const cx = (bbox.x0 + bbox.x1) / 2, cz = (bbox.y0 + bbox.y1) / 2;
@@ -971,6 +1151,12 @@ function setCamera(which) {
   if (which === "top") {
     controls.target.set(cx, 0, cz);
     camera.position.set(cx, span * 1.55, cz + 0.01);
+  } else if (which === "photo") {
+    const r = state.rooms.find(x => x.id === state.selected) || state.rooms.find(x => x.type === "living") || state.rooms[0];
+    if (!r) return;
+    const { pos, look } = photoCam(r);
+    camera.position.copy(pos);
+    controls.target.copy(pos.clone().add(look.clone().sub(pos).normalize().multiplyScalar(0.6)));
   } else if (which === "room") {
     const r = state.rooms.find(x => x.id === state.selected) || state.rooms.slice().sort((a, b) => b.w * b.d - a.w * a.d)[0];
     if (!r) return;
@@ -1134,6 +1320,7 @@ try { const n = JSON.parse(localStorage.getItem("plan3d-notes") || "null"); if (
 const saveNotes = () => { try { localStorage.setItem("plan3d-notes", JSON.stringify(notes)); } catch (e) {} };
 
 function captureView(roomId) {
+  if (state.photo) setCamera("iso");
   const w = 960, h = 640;
   const prevSel = state.selected;
   if (prevSel !== null) { state.selected = null; rebuild3D(); }
@@ -1155,6 +1342,28 @@ function captureView(roomId) {
   if (prevSel !== null) { state.selected = prevSel; rebuild3D(); }
   resize();
   return url;
+}
+
+// Фото комнат для дизайн-проекта: полная высота стен, потолок, свет, вид от лица человека
+function capturePhotos(ids) {
+  const w = 960, h = 640, out = {};
+  const prev = { photo: state.photo, cutaway: state.cutaway, sel: state.selected, fov: camera.fov, cutBefore: state.cutawayBefore };
+  const pos = camera.position.clone(), tgt = controls.target.clone();
+  state.photo = true; state.cutaway = false; state.selected = null; photoLights(true); rebuild3D();
+  renderer.setSize(w, h, false); camera.aspect = w / h; camera.fov = 62; camera.updateProjectionMatrix();
+  for (const id of ids) {
+    const r = state.rooms.find(x => x.id === id); if (!r) continue;
+    const { pos: p, look } = photoCam(r);
+    camera.position.copy(p); camera.lookAt(look);
+    renderer.render(scene, camera);
+    out[id] = c3d.toDataURL("image/jpeg", 0.9);
+  }
+  state.photo = prev.photo; state.cutaway = prev.cutaway; state.selected = prev.sel; state.cutawayBefore = prev.cutBefore;
+  photoLights(state.photo); camera.fov = prev.fov; camera.updateProjectionMatrix();
+  rebuild3D();
+  camera.position.copy(pos); controls.target.copy(tgt); controls.update();
+  resize();
+  return out;
 }
 
 function roomSpec(r) {
@@ -1391,14 +1600,17 @@ async function renderBoard() {
     setMode("3d"); state.selected = Number(b.dataset.open); renderList(); rebuild3D(); setCamera("room");
   }));
   // рендеры по одному, чтобы страница не подвисала
-  const ids = [null, ...state.rooms.map(r => r.id)];
-  for (const id of ids) {
-    await new Promise(r => setTimeout(r, 0));
-    if (state.mode !== "board") return;
-    const url = captureView(id);
-    shots.set(id === null ? "all" : id, url);
-    const img = board.querySelector(`#shot-${id === null ? "all" : id}`);
-    if (img) img.src = url;
+  await new Promise(r => setTimeout(r, 0));
+  if (state.mode !== "board") return;
+  const all = captureView(null);
+  shots.set("all", all);
+  const allImg = board.querySelector("#shot-all"); if (allImg) allImg.src = all;
+  await new Promise(r => setTimeout(r, 0));
+  if (state.mode !== "board") return;
+  const photos = capturePhotos(state.rooms.map(r => r.id));
+  for (const [id, url] of Object.entries(photos)) {
+    shots.set(Number(id), url);
+    const img = board.querySelector(`#shot-${id}`); if (img) img.src = url;
   }
 }
 
@@ -1467,7 +1679,7 @@ async function exportBoard() {
   for (let i = 0; i < state.rooms.length; i++) {
     const r = state.rooms[i], sp = roomSpec(r);
     const x = pad + (i % col) * (cw + gap), yy = y + Math.floor(i / col) * (ch + measureCard + gap);
-    const im = await loadImg(shots.get(r.id) || captureView(r.id));
+    const im = await loadImg(shots.get(r.id) || capturePhotos([r.id])[r.id]);
     if (im) g.drawImage(im, x, yy, cw, ch);
     let ly = yy + ch + 40;
     g.fillStyle = "#22262a"; g.font = "700 28px Onest, system-ui, sans-serif"; g.fillText(r.name, x, ly);
@@ -1567,7 +1779,8 @@ function select(id, focusCam = false) {
   state.selected = id;
   roomsEl.querySelectorAll(".room").forEach(el => el.classList.toggle("sel", Number(el.dataset.id) === id));
   rebuild3D();
-  if (focusCam || state.cam === "room") setCamera("room");
+  if (state.cam === "photo") setCamera("photo");
+  else if (focusCam || state.cam === "room") setCamera("room");
 }
 let rebuildTimer;
 function changed() {
