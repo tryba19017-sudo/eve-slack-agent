@@ -14,16 +14,29 @@ export default telegramChannel({
       );
       await channel.telegram.startTyping(rendering ? "upload_photo" : "typing");
     },
-    // Rendered images live in the sandbox; send them to the chat as photos.
     async "action.result"(data, channel, ctx) {
       const { result } = data;
-      if (
-        result.kind !== "tool-result" ||
-        result.toolName !== "render_3d_design" ||
-        result.isError
-      ) {
+      if (result.kind !== "tool-result" || result.isError) return;
+
+      // The shopping list is HTML so each store link stays a short label.
+      if (result.toolName === "shopping_list") {
+        const { messages } = result.output as { messages: string[] };
+        for (const text of messages) {
+          await channel.telegram.request("sendMessage", {
+            chat_id: channel.telegram.chatId,
+            ...(channel.telegram.messageThreadId !== undefined
+              ? { message_thread_id: channel.telegram.messageThreadId }
+              : {}),
+            text,
+            parse_mode: "HTML",
+            link_preview_options: { is_disabled: true },
+          });
+        }
         return;
       }
+
+      // Rendered images live in the sandbox; send them to the chat as photos.
+      if (result.toolName !== "render_3d_design") return;
       const output = result.output as { path: string; mediaType: string; caption: string };
       const sandbox = await ctx.getSandbox();
       const bytes = await sandbox.readBinaryFile({ path: output.path });
