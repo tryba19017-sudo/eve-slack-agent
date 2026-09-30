@@ -121,6 +121,11 @@ main { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min
 .shoptable .links a { font-size: 12px; color: var(--accent); border: 1px solid var(--line); border-radius: 99px; padding: 1px 8px; text-decoration: none; white-space: nowrap; }
 .shoptable .links a:hover { border-color: var(--accent); }
 .room .finish { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.hf { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.hf .hf-img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 8px; background: var(--stage); }
+.hf .hf-note { font-size: 12px; color: var(--muted); line-height: 1.45; }
+.hf .hf-note.err { color: var(--danger); }
+.hf a.hf-link { color: var(--accent); font-weight: 600; }
 .tag { font-size: 11px; font-weight: 600; background: var(--accent-soft); color: var(--fg); border-radius: 99px; padding: 2px 8px; white-space: nowrap; }
 @media (max-width: 820px) {
   .whole, .shophead { grid-template-columns: minmax(0, 1fr); }
@@ -1572,6 +1577,7 @@ async function renderBoard() {
           <button class="btn primary" type="button" id="aiBtn">Описание от дизайнера</button>
           <button class="btn" type="button" id="boardPng">Скачать дизайн-проект</button>
         </div>
+        <div class="hf" data-hf="all"></div>
         <div class="status" id="boardStatus"></div>
       </div>
     </section>
@@ -1585,10 +1591,12 @@ async function renderBoard() {
           <dl class="spec"><dt>Пол</dt><dd>${esc(sp.floor)}</dd><dt>Стены</dt><dd>${esc(sp.walls)}</dd><dt>Акцент</dt><dd>${esc(sp.accent)}</dd><dt>Мебель</dt><dd>${esc(sp.items.join(", ") || "—")}</dd></dl>
           <p class="desc">${esc(sp.text)}</p>
           ${note ? `<p class="desc ai">${esc(note)}</p>` : ""}
+          <div class="hf" data-hf="${r.id}"></div>
           <div class="row"><button class="btn" type="button" data-open="${r.id}">Открыть в 3D</button><button class="btn" type="button" data-shop="${r.id}">Смета и где купить</button></div>
         </div>
       </article>`;
     }).join("")}</div>`;
+  mountRenderSlots();
   const aiBtn = board.querySelector("#aiBtn");
   aiBtn.hidden = !sampleFn;
   aiBtn.addEventListener("click", askDesigner);
@@ -1611,6 +1619,121 @@ async function renderBoard() {
   for (const [id, url] of Object.entries(photos)) {
     shots.set(Number(id), url);
     const img = board.querySelector(`#shot-${id}`); if (img) img.src = url;
+  }
+}
+
+// ---------- Фотореалистичный рендер через коннектор Higgsfield ----------
+// Страница не может показывать картинки с чужих сайтов, поэтому готовый
+// рендер открывается по ссылке; попытка показать его inline — best effort.
+const HF = "Higgsfield";
+let mcp = null;
+let hfRenders = {};
+try { hfRenders = JSON.parse(localStorage.getItem("plan3d-renders") || "{}") || {}; } catch (e) {}
+const saveRenders = () => { try { localStorage.setItem("plan3d-renders", JSON.stringify(hfRenders)); } catch (e) {} };
+const STYLE_EN = { modern: "modern contemporary", scandi: "Scandinavian", loft: "industrial loft", minimal: "minimalist", japandi: "Japandi", neo: "neoclassical" };
+const TYPE_EN = { living: "living room", kitchen: "kitchen-dining room", bedroom: "bedroom", kids: "kids room", office: "home office", bathroom: "bathroom", wc: "toilet room", hallway: "entrance hallway", balcony: "glazed balcony", storage: "storage room" };
+const WALL_EN = { paint: "matte paint", "wp-stripes": "striped non-woven wallpaper", "wp-botanical": "botanical leaf-pattern wallpaper", "wp-geo": "geometric-pattern wallpaper", plaster: "decorative Venetian plaster", moldings: "painted walls with classic moldings", brick: "brick-look tiles", tile: "ceramic wall tiles 30x60", slats: "fluted wood slat acoustic panels on dark felt" };
+const FLOOR_EN = { laminate: "laminate", parquet: "engineered wood", herring: "herringbone parquet", vinyl: "SPC vinyl planks", tile: "porcelain tiles 60x60", microcement: "microcement" };
+const TONE_EN = { "светлый дуб": "light oak", "натуральный дуб": "natural oak", "орех": "walnut" };
+const REALISM_EN = "Photorealistic, indistinguishable from a professional interior photograph (Corona Renderer / V-Ray quality): visible wood grain and fabric weave, slight wrinkles on bedding and curtains, realistic reflections on glass, tile and metal, natural daylight with soft shadows and ambient occlusion, warm lamps, lived-in details (books, throw, plants, vase). No people, no text, no labels, no watermark.";
+
+function roomPrompt(r) {
+  const st = styleFor(r), fin = finishFor(r), f = floorOf(r, st);
+  const style = STYLE_EN[STYLES[r.style] ? r.style : state.style];
+  const items = (roomItems.get(r.id) || []).join(", ");
+  const wood = TONE_EN[woodTone(st.wood)] || "oak";
+  return [
+    `Photorealistic interior photograph of a ${style} ${TYPE_EN[r.type]} ${fmt(r.w)} x ${fmt(r.d)} m in a modern apartment, shot at eye level (1.5 m) from the corner with a 20-22 mm lens, vertical lines perfectly straight.`,
+    `Walls: ${WALL_EN[fin.walls]}, color ${st.wall}.`,
+    fin.accent !== "none" ? `Accent wall behind the main furniture: ${WALL_EN[fin.accent]}${fin.accent === "slats" ? ` in ${wood}` : ""}.` : "",
+    `Floor: ${FLOOR_EN[f.fin]}${f.kind === "planks" || f.kind === "herring" ? `, ${TONE_EN[woodTone(f.color)] || "oak"}` : ""}.`,
+    items ? `Furniture and fixtures (Russian names): ${items}.` : "",
+    `Palette: walls ${st.wall}, wood ${st.wood} (${wood}), textiles ${st.fabric}, accent ${st.accent}.`,
+    ["living", "bedroom", "kids", "office"].includes(r.type) ? "Window with floor-length linen curtains." : "",
+    REALISM_EN,
+  ].filter(Boolean).join(" ");
+}
+function wholePrompt() {
+  const style = STYLE_EN[state.style];
+  const list = state.rooms.map(r => { const fin = finishFor(r); return `${TYPE_EN[r.type]} ${fmt(r.w)}x${fmt(r.d)} m at x ${fmt(r.x)} m, y ${fmt(r.y)} m (walls ${WALL_EN[fin.walls]}${fin.accent !== "none" ? `, accent ${WALL_EN[fin.accent]}` : ""}, floor ${FLOOR_EN[fin.floor]}; ${(roomItems.get(r.id) || []).slice(0, 4).join(", ")})`; }).join("; ");
+  return `Photorealistic 3D isometric cutaway (dollhouse view) of a whole apartment seen from above at 45 degrees, walls cut at door height so every room is visible, ${style} style. Rooms laid out on a plan where x grows to the right and y grows down: ${list}. Realistic materials and furniture, soft daylight, architectural visualization, Corona Renderer quality, no text, no labels, no people.`;
+}
+
+function hfErrorText(e) {
+  switch (e && e.code) {
+    case "server_not_connected": return "Подключите Higgsfield: claude.ai → Настройки → Коннекторы.";
+    case "needs_reauth": return "Переподключите Higgsfield: claude.ai → Настройки → Коннекторы.";
+    case "selection_required": return "У вас подключено несколько Higgsfield. Выберите один в окне Claude и повторите.";
+    case "not_in_manifest": return "Доступ к Higgsfield для этой страницы выключен. Разрешите его и повторите.";
+    case "blocked_by_policy": case "approval_required": return "Политика вашей организации не разрешает этот вызов.";
+    case "tool_error": return "Higgsfield ответил ошибкой: " + String(e.message || "").slice(0, 200);
+    case "server_unavailable": return "Higgsfield сейчас не отвечает. Проверьте библиотеку Higgsfield, прежде чем запускать снова: рендер мог уже начаться.";
+    default: return "Не получилось сделать рендер. Попробуйте ещё раз.";
+  }
+}
+
+function renderSlot(el) {
+  const key = el.dataset.hf, done = hfRenders[key];
+  el.textContent = "";
+  if (done && done.url) {
+    const img = document.createElement("img");
+    img.className = "hf-img"; img.alt = "Фотореалистичный рендер"; img.src = done.url;
+    img.addEventListener("error", () => img.remove());
+    const a = document.createElement("a");
+    a.className = "hf-link"; a.href = done.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Открыть фотореалистичный рендер";
+    el.append(img, a);
+  }
+  if (!mcp) {
+    if (!done) { const n = document.createElement("div"); n.className = "hf-note"; n.textContent = "Фотореалистичный рендер доступен, когда программа открыта в Claude с подключённым Higgsfield."; el.append(n); }
+    return;
+  }
+  const b = document.createElement("button");
+  b.type = "button"; b.className = "btn"; b.textContent = done ? "Сделать новый рендер" : "Фотореалистичный рендер";
+  const note = document.createElement("div"); note.className = "hf-note";
+  note.textContent = "Higgsfield, около 0,25 кредита и 20–60 секунд.";
+  b.addEventListener("click", () => startRender(key, el, b, note));
+  el.append(b, note);
+}
+function mountRenderSlots() { board.querySelectorAll("[data-hf]").forEach(renderSlot); }
+
+async function startRender(key, el, btn, note, useUnlim) {
+  const r = key === "all" ? null : state.rooms.find(x => String(x.id) === key);
+  if (key !== "all" && !r) return;
+  btn.disabled = true; note.classList.remove("err");
+  note.textContent = "Отправляю в Higgsfield…";
+  const params = { model: "gpt_image_2_5", aspect_ratio: "3:2", prompt: r ? roomPrompt(r) : wholePrompt() };
+  if (useUnlim !== undefined) params.use_unlim = useUnlim;
+  try {
+    const res = await mcp.callTool(HF, "generate_image", { params }, { cache: false });
+    const p = res.payload || {};
+    if (p.unlim_choice) {
+      note.textContent = "У вас есть бесплатные генерации Higgsfield. Чем оплатить этот рендер?";
+      const row = document.createElement("div"); row.className = "row";
+      for (const [label, v] of [["Бесплатной генерацией", true], ["Кредитами", false]]) {
+        const c = document.createElement("button"); c.type = "button"; c.className = "btn mini"; c.textContent = label;
+        c.addEventListener("click", () => { row.remove(); startRender(key, el, btn, note, v); });
+        row.append(c);
+      }
+      el.append(row); btn.disabled = false; return;
+    }
+    const job = (p.results || p.jobs || [])[0];
+    const jobId = job && (job.id || job.job_id);
+    if (!jobId) throw { code: "tool_error", message: "нет задания в ответе" };
+    note.textContent = "Рендерится… обычно до минуты.";
+    for (let i = 0; i < 16; i++) {
+      const w = await mcp.callTool(HF, "jobs_wait", { jobs: [{ index: 0, job_id: jobId }], timeout_seconds: 15 }, { cache: false });
+      const j = ((w.payload || {}).jobs || [])[0] || {};
+      if (j.status === "completed" && j.result_url) {
+        hfRenders[key] = { url: j.result_url, at: Date.now() }; saveRenders();
+        renderSlot(el); return;
+      }
+      if (j.status === "failed" || j.status === "nsfw" || j.status === "canceled") throw { code: "tool_error", message: "генерация не удалась" };
+    }
+    note.textContent = "Рендер ещё идёт. Он появится в вашей библиотеке Higgsfield.";
+  } catch (e) {
+    note.textContent = hfErrorText(e); note.classList.add("err");
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -1981,6 +2104,8 @@ markStyle(); renderList(); applyThemeBg(); resize(); rebuild3D(); setCamera("iso
     }
   } catch (e) {}
   try { downloads = await window.claude.use("downloads"); } catch (e) {}
+  try { mcp = await window.claude.use("mcp"); } catch (e) { mcp = null; }
+  if (state.mode === "board") mountRenderSlots();
 })();
 })();
 </script>
