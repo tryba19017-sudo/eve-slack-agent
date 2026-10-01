@@ -10,7 +10,8 @@
     "build": "eve build",
     "dev": "eve dev",
     "start": "eve start",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "build:standalone": "node scripts/build-standalone.mjs"
   },
   "dependencies": {
     "@vercel/connect": "0.8.0",
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@types/node": "^25.9.3",
+    "esbuild": "0.25.10",
     "typescript": "7.0.2"
   }
 }

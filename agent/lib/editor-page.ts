@@ -16,9 +16,11 @@ export const editorPage = String.raw`<!doctype html>
     --hover: #f6f8fd; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 4px 16px rgba(0,0,0,.06);
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #17181b; --panel: #202226; --ink: #e8e8e6; --muted: #a0a3a8; --line: #33363b;
-      --accent: #7ea2ff; --accent-ink: #0d1117; --danger: #ff8a7a; --hover: #2a2d33; }
+    :root:not([data-theme="light"]) { --bg: #17181b; --panel: #202226; --ink: #e8e8e6; --muted: #a0a3a8; --line: #33363b;
+      --accent: #7ea2ff; --accent-ink: #0d1117; --danger: #ff8a7a; --hover: #2a2d33; color-scheme: dark; }
   }
+  :root[data-theme="dark"] { --bg: #17181b; --panel: #202226; --ink: #e8e8e6; --muted: #a0a3a8; --line: #33363b;
+    --accent: #7ea2ff; --accent-ink: #0d1117; --danger: #ff8a7a; --hover: #2a2d33; color-scheme: dark; }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink);
@@ -36,7 +38,7 @@ export const editorPage = String.raw`<!doctype html>
     background: var(--panel); }
   input[type=text]:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
-  header { position: sticky; top: 0; z-index: 10; display: flex; flex-wrap: wrap; gap: 8px;
+  header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 10; display: flex; flex-wrap: wrap; gap: 8px;
     align-items: center; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--line); }
   header .brand { font-weight: 650; margin-right: 8px; }
   header .file { color: var(--muted); max-width: 30ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -202,7 +204,37 @@ export const editorPage = String.raw`<!doctype html>
   $("author").addEventListener("change", function () { try { localStorage.setItem("review-author", $("author").value); } catch (e) {} });
 
   // ---------- server calls ----------
+  // When the docx library is bundled into the page (standalone build), work
+  // locally instead of calling the server.
+  function bytesToB64(bytes) {
+    var out = "";
+    for (var i = 0; i < bytes.length; i += 0x8000) out += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(out);
+  }
+  function localCall(endpoint, fields, blob) {
+    var R = window.DocxReview, extra = {};
+    document.body.classList.add("busy");
+    return (blob || b64ToBlob(state.b64)).arrayBuffer().then(function (buf) {
+      var bytes = new Uint8Array(buf);
+      if (endpoint === "apply") {
+        return R.applyReview(bytes, JSON.parse(fields.operations), { author: fields.author, enableTracking: true })
+          .then(function (r) { extra.results = r.results; return r.bytes; });
+      }
+      if (endpoint === "resolve") {
+        if (fields.mode === "accept" || fields.mode === "reject") {
+          return R.resolveRevisions(bytes, { mode: fields.mode, author: fields.author || undefined }).then(function (r) { return r.bytes; });
+        }
+        return R.setTracking(bytes, fields.mode === "tracking-on");
+      }
+      return bytes;
+    }).then(function (bytes) {
+      return R.readDocx(bytes).then(function (doc) {
+        return Object.assign({ ok: true, document: doc, docx: bytesToB64(bytes) }, extra);
+      });
+    }).finally(function () { document.body.classList.remove("busy"); });
+  }
   function call(endpoint, fields, blob) {
+    if (window.DocxReview) return localCall(endpoint, fields, blob);
     var form = new FormData();
     form.append("file", blob || b64ToBlob(state.b64), state.name || "document.docx");
     Object.keys(fields || {}).forEach(function (k) { if (fields[k] != null) form.append(k, fields[k]); });
@@ -250,10 +282,21 @@ export const editorPage = String.raw`<!doctype html>
   ["dragenter", "dragover"].forEach(function (t) { document.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add("drag"); }); });
   ["dragleave", "drop"].forEach(function (t) { document.addEventListener(t, function (e) { e.preventDefault(); drop.classList.remove("drag"); }); });
   document.addEventListener("drop", function (e) { openFile(e.dataTransfer.files[0]); });
+  var downloads = null;
+  if (window.claude && window.claude.use) {
+    window.claude.use("downloads").then(function (d) { downloads = d; }, function () {});
+  }
   $("saveBtn").onclick = function () {
+    var filename = state.name.replace(/\.docx$/i, "").replace(/_рецензия$/, "") + "_рецензия.docx";
+    if (downloads) {
+      downloads.save({ filename: filename, data: b64ToBlob(state.b64) })
+        .then(function () { toast("Файл сохранён"); })
+        .catch(function (e) { if (e && e.code !== "declined") toast("Не удалось сохранить файл: " + (e.message || e.code), true); });
+      return;
+    }
     var a = document.createElement("a");
     a.href = URL.createObjectURL(b64ToBlob(state.b64));
-    a.download = state.name.replace(/\.docx$/i, "") .replace(/_рецензия$/, "") + "_рецензия.docx";
+    a.download = filename;
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
   };
@@ -340,7 +383,17 @@ export const editorPage = String.raw`<!doctype html>
     });
   }
   $("acceptAll").onclick = function () { resolve("accept"); };
-  $("rejectAll").onclick = function () { if (confirm("Отклонить все исправления?")) resolve("reject"); };
+  var rejectArmed = null;
+  $("rejectAll").onclick = function () {
+    var btn = $("rejectAll");
+    if (!rejectArmed) {
+      btn.textContent = "Точно отклонить все?";
+      rejectArmed = setTimeout(function () { rejectArmed = null; btn.textContent = "Отклонить все"; }, 4000);
+      return;
+    }
+    clearTimeout(rejectArmed); rejectArmed = null; btn.textContent = "Отклонить все";
+    resolve("reject");
+  };
   $("trackToggle").onclick = function () { resolve(state.doc.trackRevisionsEnabled ? "tracking-off" : "tracking-on"); };
 
   // ---------- paragraph editing ----------

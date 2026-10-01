@@ -46,6 +46,10 @@ Open `/editor` on the deployment (or `http://localhost:3000/editor` under
 - accept/reject changes (all or per author), toggle Track Changes, switch
   between the markup and final view, undo, and download the result.
 
+No server is needed for the standalone build: `pnpm build:standalone` writes
+`standalone/review-editor.html`, a single file with the docx library inlined
+that works offline when opened in a browser.
+
 Set `EDITOR_PASSWORD` (and optionally `EDITOR_USER`, default `editor`) to open
 the editor in production; without it the editor only answers under `eve dev`.
 The server keeps nothing: the page sends the current file with every request.
