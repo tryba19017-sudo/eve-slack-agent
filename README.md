@@ -22,6 +22,22 @@ You can start editing the agent by modifying `agent/agent.ts`. Its behavior is d
 
 This project uses the Eve framework's bundled guides — see `node_modules/eve/dist/docs/public/` after installing dependencies.
 
+## Word review mode
+
+The agent reviews Word documents in Slack using Track Changes:
+
+1. Mention the bot (or DM it) and attach a `.docx` file with what to check.
+2. The agent reads it (`read_docx`), writes every edit as a tracked change with
+   optional margin comments (`review_docx`), and uploads the reviewed file back
+   to the thread (`send_file`).
+3. Open the file in Word → **Review** to accept or reject each change. You can
+   also ask the agent to accept/reject changes (all or by author) with
+   `resolve_tracked_changes`.
+
+The Slack app needs the `files:read` and `files:write` bot scopes. Set
+`REVIEW_AUTHOR` to change the default reviewer name shown in Word (`Eve`).
+The OOXML logic lives in `agent/lib/docx-review.ts`.
+
 ## Learn More
 
 To learn more about eve, take a look at the following resources:

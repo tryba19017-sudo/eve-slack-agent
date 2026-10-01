@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "@vercel/connect": "0.8.0",
+    "@xmldom/xmldom": "^0.9.12",
     "ai": "7.0.70",
     "eve": "^0.39.3",
+    "jszip": "^3.10.2",
     "zod": "4.4.3"
   },
   "devDependencies": {
