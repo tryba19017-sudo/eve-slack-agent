@@ -106,6 +106,7 @@ export const editorPage = String.raw`<!doctype html>
     border: 1px solid var(--line); border-radius: 10px; padding: 10px; box-shadow: var(--shadow); }
   #pop textarea { width: 100%; min-height: 70px; margin-bottom: 8px; }
   #pop .quote { font-size: 12px; color: var(--muted); margin-bottom: 6px; max-height: 3.2em; overflow: hidden; }
+  #aiTask { width: 100%; resize: vertical; }
   #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 30; display: none;
     max-width: min(560px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 10px; background: #1f2328;
     color: #fff; box-shadow: var(--shadow); }
@@ -143,6 +144,15 @@ export const editorPage = String.raw`<!doctype html>
     <div class="paper" id="paper" hidden></div>
   </section>
   <aside id="side" hidden>
+    <div class="card" id="aiCard" hidden>
+      <h3>Исправить с ИИ</h3>
+      <textarea id="aiTask" rows="3" placeholder="Что проверить? По умолчанию: орфография, пунктуация, грамматика, опечатки."></textarea>
+      <div class="btns" style="margin-top:8px">
+        <button class="primary" id="aiRun">Исправить с ИИ</button>
+        <button id="aiStop" hidden>Остановить</button>
+      </div>
+      <div class="muted" id="aiStatus" style="margin-top:8px"></div>
+    </div>
     <div class="card">
       <h3>Исправления</h3>
       <div id="revList"></div>
@@ -344,6 +354,7 @@ export const editorPage = String.raw`<!doctype html>
     var has = !!state.doc;
     $("empty").hidden = has; $("paper").hidden = !has; $("side").hidden = !has;
     $("saveBtn").disabled = !has; $("undoBtn").disabled = !state.history.length;
+    $("aiCard").hidden = !sample;
     if (!has) return;
     var paper = $("paper"); paper.textContent = "";
     state.doc.paragraphs.forEach(function (p) { paper.appendChild(renderParagraph(p)); });
@@ -395,6 +406,95 @@ export const editorPage = String.raw`<!doctype html>
     resolve("reject");
   };
   $("trackToggle").onclick = function () { resolve(state.doc.trackRevisionsEnabled ? "tracking-off" : "tracking-on"); };
+
+  // ---------- AI review (Claude, via the artifact "sample" capability) ----------
+  var sample = null, aiCtl = null;
+  var AI_AUTHOR = "ИИ-рецензент";
+  if (window.claude && window.claude.use) {
+    window.claude.use("sample").then(function (fn) { sample = fn; render(); }, function () {});
+  }
+  function aiStatus(text) { $("aiStatus").textContent = text; }
+  function aiChunks(paragraphs) {
+    var chunks = [], cur = [], size = 0;
+    paragraphs.forEach(function (p) {
+      if (!p.plain.trim()) return;
+      if (size + p.plain.length > 12000 && cur.length) { chunks.push(cur); cur = []; size = 0; }
+      cur.push(p); size += p.plain.length;
+    });
+    if (cur.length) chunks.push(cur);
+    return chunks;
+  }
+  function aiPrompt(task, chunk) {
+    return [
+      "Ты — профессиональный редактор и корректор документов на русском языке (и на языке документа, если он другой).",
+      "Задание рецензента: " + (task || "вычитка: исправь орфографию, пунктуацию, грамматику, опечатки, явные ошибки согласования. Смысл, термины, цифры, названия и юридические формулировки не меняй."),
+      "",
+      "Ниже абзацы документа в формате JSON: i — номер абзаца, t — текст. Символ табуляции внутри текста сохраняй как есть.",
+      JSON.stringify(chunk.map(function (p) { return { i: p.index, t: p.plain }; })),
+      "",
+      "Верни ТОЛЬКО JSON такого вида:",
+      '{"edits":[{"i":3,"text":"полный исправленный текст абзаца","why":"короткое пояснение или пустая строка"}],"comments":[{"i":5,"quote":"точная цитата из абзаца","comment":"замечание"}]}',
+      "Правила:",
+      "- В edits включай только абзацы, которые действительно нужно изменить; text — весь абзац целиком после правки, меняй минимум слов.",
+      "- why заполняй, когда правка неочевидна (не для простых опечаток).",
+      "- comments — для замечаний, которые нельзя исправить без автора (противоречия, неясности, вопросы). quote копируй символ в символ.",
+      "- Если исправлять нечего, верни {\"edits\":[],\"comments\":[]}."
+    ].join("\n");
+  }
+  function aiRun() {
+    if (!sample || !state.doc) return;
+    var task = $("aiTask").value.trim();
+    var chunks = aiChunks(state.doc.paragraphs);
+    if (!chunks.length) { toast("В документе нет текста для проверки", true); return; }
+    var byIndex = {}; state.doc.paragraphs.forEach(function (p) { byIndex[p.index] = p; });
+    var comments = [], edits = [];
+    aiCtl = new AbortController();
+    $("aiRun").disabled = true; $("aiStop").hidden = false;
+    var step = Promise.resolve();
+    chunks.forEach(function (chunk, n) {
+      step = step.then(function () {
+        aiStatus("Claude читает документ" + (chunks.length > 1 ? " (часть " + (n + 1) + " из " + chunks.length + ")" : "") + "…");
+        return sample.json(aiPrompt(task, chunk), {
+          signal: aiCtl.signal, modelTier: "default",
+          onText: function () { aiStatus("Claude пишет правки" + (chunks.length > 1 ? " (часть " + (n + 1) + " из " + chunks.length + ")" : "") + "…"); }
+        }).then(function (res) {
+          (res && res.edits || []).forEach(function (e) {
+            var p = byIndex[e.i];
+            if (!p || typeof e.text !== "string" || !e.text.trim() || e.text === p.plain) return;
+            edits.push({ action: "edit_paragraph", paragraph: p.index, text: e.text.replace(/\r?\n+/g, " "), comment: (e.why || "").trim() || undefined });
+          });
+          (res && res.comments || []).forEach(function (c) {
+            var p = byIndex[c.i];
+            if (!p || !c.comment) return;
+            var at = c.quote ? p.plain.indexOf(c.quote) : -1;
+            var start = at >= 0 ? at : 0, end = at >= 0 ? at + c.quote.length : p.plain.length;
+            if (end > start) comments.push({ action: "comment_range", paragraph: p.index, start: start, end: end, comment: String(c.comment) });
+          });
+        });
+      });
+    });
+    step.then(function () {
+      if (!edits.length && !comments.length) { aiStatus("Claude не нашёл, что исправить."); return; }
+      aiStatus("Вношу правки…");
+      // Comments first: their offsets refer to the text before the edits.
+      return call("apply", { operations: JSON.stringify(comments.concat(edits)), author: AI_AUTHOR }).then(function (res) {
+        commit(res, true);
+        var ok = (res.results || []).filter(function (r) { return r.ok; }).length;
+        aiStatus("Готово. Исправлено абзацев: " + edits.length + ", примечаний: " + comments.length + ". Проверьте правки и примите или отклоните их.");
+        if (ok < comments.length + edits.length) toast("Часть правок ИИ не удалось внести", true);
+      });
+    }).catch(function (e) {
+      var code = e && e.code;
+      if (code === "cancelled") aiStatus("Остановлено.");
+      else if (code === "not_granted") aiStatus("Доступ к Claude не разрешён для этой страницы.");
+      else if (code === "rate_limited") aiStatus("Слишком много запросов. Подождите минуту и попробуйте снова.");
+      else aiStatus("Не получилось: " + ((e && e.message) || code || e));
+    }).finally(function () {
+      $("aiRun").disabled = false; $("aiStop").hidden = true; aiCtl = null;
+    });
+  }
+  $("aiRun").onclick = aiRun;
+  $("aiStop").onclick = function () { if (aiCtl) aiCtl.abort(); };
 
   // ---------- paragraph editing ----------
   function startEdit(div, opts) {
