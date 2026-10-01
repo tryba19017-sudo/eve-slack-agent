@@ -34,6 +34,22 @@ The agent reviews Word documents in Slack using Track Changes:
    also ask the agent to accept/reject changes (all or by author) with
    `resolve_tracked_changes`.
 
+### Browser editor
+
+Open `/editor` on the deployment (or `http://localhost:3000/editor` under
+`pnpm dev`) to review a document by hand:
+
+- open a `.docx` (button or drag and drop);
+- click a paragraph and edit it as plain text — only the words you change are
+  saved as tracked changes, with an optional note as a margin comment;
+- select text to add a comment, add or delete paragraphs;
+- accept/reject changes (all or per author), toggle Track Changes, switch
+  between the markup and final view, undo, and download the result.
+
+Set `EDITOR_PASSWORD` (and optionally `EDITOR_USER`, default `editor`) to open
+the editor in production; without it the editor only answers under `eve dev`.
+The server keeps nothing: the page sends the current file with every request.
+
 The Slack app needs the `files:read` and `files:write` bot scopes. Set
 `REVIEW_AUTHOR` to change the default reviewer name shown in Word (`Eve`).
 The OOXML logic lives in `agent/lib/docx-review.ts`.

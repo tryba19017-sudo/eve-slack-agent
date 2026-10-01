@@ -25,9 +25,20 @@ type XEl = NonNullable<XDoc["documentElement"]>;
 // ---------------------------------------------------------------------------
 // Public types
 
+export interface ParagraphSegment {
+  text: string;
+  kind: "text" | "ins" | "del" | "comment";
+  author?: string;
+  /** Comment id for `comment` segments. */
+  id?: string;
+}
+
 export interface ParagraphInfo {
   index: number;
   text: string;
+  /** Current text with deletions removed — what edit_paragraph and comment_range offsets refer to. */
+  plain: string;
+  segments: ParagraphSegment[];
   style?: string;
   inTable: boolean;
 }
@@ -80,7 +91,11 @@ export type ReviewOperation =
       text: string;
       comment?: string;
     }
-  | { action: "delete_paragraph"; paragraph: number; comment?: string };
+  | { action: "delete_paragraph"; paragraph: number; comment?: string }
+  /** Rewrite a paragraph; only the words that differ become tracked changes. */
+  | { action: "edit_paragraph"; paragraph: number; text: string; comment?: string }
+  /** Comment on a character range of a paragraph's current text. */
+  | { action: "comment_range"; paragraph: number; start: number; end: number; comment: string };
 
 export interface ReviewOptions {
   author: string;
@@ -310,6 +325,104 @@ function annotatedText(p: XEl): string {
   return out;
 }
 
+function paragraphSegments(p: XEl): ParagraphSegment[] {
+  const out: ParagraphSegment[] = [];
+  const push = (text: string, kind: ParagraphSegment["kind"], author?: string) => {
+    if (!text) return;
+    const last = out[out.length - 1];
+    if (last && last.kind === kind && last.author === author && kind !== "comment") last.text += text;
+    else out.push({ text, kind, ...(author ? { author } : {}) });
+  };
+  const walk = (el: XEl, kind: "text" | "ins" | "del", author?: string) => {
+    for (const c of elementChildren(el)) {
+      if (!isW(c)) continue;
+      const local = c.localName!;
+      if (local === "r") {
+        for (const rc of elementChildren(c)) {
+          if (!isW(rc)) continue;
+          if (rc.localName === "commentReference") {
+            out.push({ text: "", kind: "comment", id: wAttr(rc, "id") });
+          } else {
+            push(rc.localName === "delText" ? (rc.textContent ?? "") : runContentText(rc), kind, author);
+          }
+        }
+      } else if (local === "ins" || local === "moveTo") {
+        walk(c, kind === "del" ? "del" : "ins", kind === "text" ? wAttr(c, "author") : author);
+      } else if (local === "del" || local === "moveFrom") {
+        walk(c, "del", kind === "del" ? author : wAttr(c, "author"));
+      } else if (CONTAINERS.has(local)) {
+        walk(c, kind, author);
+      }
+    }
+  };
+  walk(p, "text");
+  return out;
+}
+
+/** Word-level diff of `a` → `b` as [start, end, replacement] hunks over `a`. */
+function diffHunks(a: string, b: string): [number, number, string][] {
+  const tok = (s: string) => s.match(/\s+|[\p{L}\p{N}]+|[^\s\p{L}\p{N}]/gu) ?? [];
+  const x = tok(a);
+  const y = tok(b);
+  // Trim common prefix/suffix so the LCS table stays small for typical edits.
+  let pre = 0;
+  while (pre < x.length && pre < y.length && x[pre] === y[pre]) pre++;
+  let suf = 0;
+  while (suf < x.length - pre && suf < y.length - pre && x[x.length - 1 - suf] === y[y.length - 1 - suf]) suf++;
+  const xs = x.slice(pre, x.length - suf);
+  const ys = y.slice(pre, y.length - suf);
+  if (xs.length * ys.length > 4_000_000) {
+    const start = x.slice(0, pre).join("").length;
+    return [[start, start + xs.join("").length, ys.join("")]];
+  }
+  const n = xs.length;
+  const m = ys.length;
+  const lcs: Uint32Array[] = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      lcs[i][j] = xs[i] === ys[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+    }
+  }
+  const hunks: [number, number, string][] = [];
+  let pos = x.slice(0, pre).join("").length;
+  let i = 0;
+  let j = 0;
+  let cur: [number, number, string] | null = null;
+  const flush = () => {
+    if (cur) hunks.push(cur);
+    cur = null;
+  };
+  while (i < n || j < m) {
+    if (i < n && j < m && xs[i] === ys[j]) {
+      flush();
+      pos += xs[i].length;
+      i++;
+      j++;
+    } else if (j < m && (i >= n || lcs[i][j + 1] >= lcs[i + 1][j])) {
+      cur ??= [pos, pos, ""];
+      cur[2] += ys[j++];
+    } else {
+      cur ??= [pos, pos, ""];
+      pos += xs[i].length;
+      cur[1] = pos;
+      i++;
+    }
+  }
+  flush();
+  // Merge hunks separated only by whitespace: "[-течении 10-][+течение 15+]" reads
+  // better than two edits around an unchanged space.
+  const merged: [number, number, string][] = [];
+  for (const h of hunks) {
+    const prev = merged[merged.length - 1];
+    const gap = prev ? a.slice(prev[1], h[0]) : "";
+    if (prev && /^\s*$/.test(gap)) {
+      prev[1] = h[1];
+      prev[2] += gap + h[2];
+    } else merged.push([...h]);
+  }
+  return merged;
+}
+
 function paragraphStyle(p: XEl): string | undefined {
   const pPr = child(p, "pPr");
   const style = pPr && child(pPr, "pStyle");
@@ -381,6 +494,8 @@ export async function readDocx(bytes: Uint8Array): Promise<DocxOverview> {
     paragraphs: paragraphs.map((p, index) => ({
       index,
       text: annotatedText(p),
+      plain: paragraphText(p),
+      segments: paragraphSegments(p),
       style: paragraphStyle(p),
       inTable: hasAncestor(p, ["tc"], doc.documentElement as XEl),
     })),
@@ -670,6 +785,47 @@ class Reviewer {
     insertAfter(refRun, end);
   }
 
+  // ---- range edits ----------------------------------------------------------
+
+  /** Track-change [start, end) of the paragraph's current text into `text`; returns the first and last new nodes. */
+  private replaceRange(p: XEl, start: number, end: number, text: string): [XNode, XNode] {
+    if (start === end) {
+      const ins = this.insertAt(p, start, text);
+      return [ins, ins];
+    }
+    const { inside } = this.runsIn(p, start, end);
+    if (inside.length === 0) throw new Error("Matched text has no editable runs.");
+    const styleFrom = inside.find((r) => child(r, "t")) ?? inside[0];
+    const styleClone = styleFrom.cloneNode(true) as XEl;
+    const dels = this.deleteRuns(inside);
+    let lastNode: XNode = dels[dels.length - 1];
+    if (text) {
+      const ins = this.insertion(text, styleClone);
+      const at = this.anchorOutside(lastNode, "after");
+      at.parent.insertBefore(ins, at.ref);
+      lastNode = ins;
+    }
+    return [dels[0], lastNode];
+  }
+
+  private insertAt(p: XEl, offset: number, text: string): XEl {
+    const spans = this.splitAt(p, offset);
+    const before = [...spans].reverse().find((s) => s.end <= offset && s.end > s.start);
+    const after = spans.find((s) => s.start >= offset && s.end > s.start);
+    const ins = this.insertion(text, before?.run ?? after?.run);
+    if (before) {
+      const at = this.anchorOutside(before.run, "after");
+      at.parent.insertBefore(ins, at.ref);
+    } else if (after) {
+      const at = this.anchorOutside(after.run, "before");
+      at.parent.insertBefore(ins, at.ref);
+    } else {
+      const pPr = child(p, "pPr");
+      p.insertBefore(ins, pPr ? pPr.nextSibling : p.firstChild);
+    }
+    return ins;
+  }
+
   // ---- operations -----------------------------------------------------------
 
   apply(op: ReviewOperation): string {
@@ -678,41 +834,43 @@ class Reviewer {
       case "delete": {
         const replacement = op.action === "replace" ? op.replace : "";
         const { p, start, end } = this.locate(op);
-        const { inside } = this.runsIn(p, start, end);
-        if (inside.length === 0) throw new Error("Matched text has no editable runs.");
-        const styleFrom = inside.find((r) => child(r, "t")) ?? inside[0];
-        const styleClone = styleFrom.cloneNode(true) as XEl;
-        const dels = this.deleteRuns(inside);
-        let lastNode: XNode = dels[dels.length - 1];
-        if (replacement) {
-          const ins = this.insertion(replacement, styleClone);
-          const at = this.anchorOutside(lastNode, "after");
-          at.parent.insertBefore(ins, at.ref);
-          lastNode = ins;
-        }
-        if (op.comment) this.addComment(op.comment, dels[0], lastNode);
+        const [first, last] = this.replaceRange(p, start, end, replacement);
+        if (op.comment) this.addComment(op.comment, first, last);
         return op.action === "replace"
           ? `Replaced "${op.find}" → "${replacement}"`
           : `Deleted "${op.find}"`;
       }
       case "insert": {
         const { p, start, end } = this.locate(op);
-        const offset = op.position === "before" ? start : end;
-        const spans = this.splitAt(p, offset);
-        const before = [...spans].reverse().find((s) => s.end <= offset && s.end > s.start);
-        const after = spans.find((s) => s.start >= offset && s.end > s.start);
-        const ins = this.insertion(op.text, before?.run ?? after?.run);
-        if (before) {
-          const at = this.anchorOutside(before.run, "after");
-          at.parent.insertBefore(ins, at.ref);
-        } else if (after) {
-          const at = this.anchorOutside(after.run, "before");
-          at.parent.insertBefore(ins, at.ref);
-        } else {
-          p.appendChild(ins);
-        }
+        const ins = this.insertAt(p, op.position === "before" ? start : end, op.text);
         if (op.comment) this.addComment(op.comment, ins, ins);
         return `Inserted "${op.text}" ${op.position} "${op.find}"`;
+      }
+      case "edit_paragraph": {
+        const p = this.paragraph(op.paragraph);
+        const hunks = diffHunks(paragraphText(p), op.text);
+        if (hunks.length === 0) return `Paragraph ${op.paragraph} unchanged`;
+        let first: XNode | undefined;
+        let last: XNode | undefined;
+        // Apply from the end so earlier offsets stay valid.
+        for (const [start, end, text] of [...hunks].reverse()) {
+          const [f, l] = this.replaceRange(p, start, end, text);
+          first = f;
+          last ??= l;
+        }
+        if (op.comment && first && last) this.addComment(op.comment, first, last);
+        return `Edited paragraph ${op.paragraph} (${hunks.length} change${hunks.length === 1 ? "" : "s"})`;
+      }
+      case "comment_range": {
+        const p = this.paragraph(op.paragraph);
+        const len = paragraphText(p).length;
+        if (!(op.start >= 0 && op.start < op.end && op.end <= len)) {
+          throw new Error(`Range ${op.start}–${op.end} is outside paragraph ${op.paragraph} (length ${len}).`);
+        }
+        const { inside } = this.runsIn(p, op.start, op.end);
+        if (inside.length === 0) throw new Error("Selected range has no runs to comment on.");
+        this.addComment(op.comment, inside[0], inside[inside.length - 1]);
+        return `Commented on paragraph ${op.paragraph}`;
       }
       case "comment": {
         const { p, start, end } = this.locate(op);
